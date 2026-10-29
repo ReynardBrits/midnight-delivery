@@ -1,11 +1,25 @@
 import math
 from dataclasses import dataclass
 
+from world import lettering
+
 
 PICKUP_ZONE = (120, 206, 200, 60)
-HARBOUR_ZONE = (2292, 768, 116, 64)
-MARKET_ZONE = (760, 1320, 120, 64)
+
+# Town centre.
 PARK_ZONE = (900, 232, 120, 56)
+MARKET_ZONE = (760, 1320, 120, 64)
+ARCADE_ZONE = (1540, 232, 120, 56)
+
+# Harbour. The container yard uses a narrow vertical bay.
+HARBOUR_ZONE = (2292, 768, 116, 64)
+CONTAINER_ZONE = (2268, 1840, 64, 112)
+DOCK_ZONE = (2980, 2216, 144, 64)
+
+# Gardens.
+CEDAR_ZONE = (281, 1792, 128, 64)
+GARDEN_ZONE = (1116, 1792, 128, 64)
+COTTAGE_ZONE = (1916, 2216, 128, 64)
 
 
 @dataclass(frozen=True)
@@ -18,50 +32,62 @@ class Contract:
 
 
 SHIFTS = (
+    # Shift 1: learn the central streets.
     (
         Contract(
-            "HARBOUR OFFICE", HARBOUR_ZONE,
-            100, 90.0,
+            "PARK ENTRANCE", PARK_ZONE,
+            100, 60.0,
         ),
         Contract(
             "NIGHT MARKET", MARKET_ZONE,
-            125, 90.0, "FRAGILE",
+            125, 80.0, "FRAGILE",
         ),
         Contract(
-            "PARK ENTRANCE", PARK_ZONE,
+            "NEON ARCADE", ARCADE_ZONE,
             150, 40.0, "EXPRESS",
         ),
     ),
+
+    # Shift 2: longer trips and a tighter loading bay.
     (
         Contract(
-            "NIGHT MARKET", MARKET_ZONE,
-            175, 50.0, "EXPRESS",
-        ),
-        Contract(
-            "PARK ENTRANCE", PARK_ZONE,
-            125, 50.0,
-        ),
-        Contract(
             "HARBOUR OFFICE", HARBOUR_ZONE,
-            150, 95.0, "FRAGILE",
+            125, 85.0,
+        ),
+        Contract(
+            "CONTAINER YARD", CONTAINER_ZONE,
+            175, 65.0, "EXPRESS",
+        ),
+        Contract(
+            "DOCK STORE", DOCK_ZONE,
+            150, 110.0, "FRAGILE",
         ),
     ),
+
+    # Shift 3: residential trips through heavier central traffic.
     (
         Contract(
-            "PARK ENTRANCE", PARK_ZONE,
-            175, 60.0, "FRAGILE",
+            "CEDAR HOUSE", CEDAR_ZONE,
+            175, 80.0, "FRAGILE",
         ),
         Contract(
-            "HARBOUR OFFICE", HARBOUR_ZONE,
-            200, 50.0, "EXPRESS",
+            "GARDEN HOUSE", GARDEN_ZONE,
+            200, 55.0, "EXPRESS",
         ),
         Contract(
-            "NIGHT MARKET", MARKET_ZONE,
-            150, 55.0,
+            "SOUTH COTTAGE", COTTAGE_ZONE,
+            150, 90.0,
         ),
     ),
 )
 
+DESTINATIONS = tuple(
+    contract
+    for shift in SHIFTS
+    for contract in shift
+)
+
+SHIFT_NAMES = ("CENTRE", "HARBOUR", "GARDENS")
 
 TEAL = (0.227, 0.839, 0.784, 1.0)
 AMBER = (1.000, 0.745, 0.357, 1.0)
@@ -96,6 +122,10 @@ class Delivery:
     @property
     def shift_number(self):
         return self.shift_index + 1
+
+    @property
+    def shift_name(self):
+        return SHIFT_NAMES[self.shift_index]
 
     @property
     def contracts(self) -> tuple[Contract, ...]:
@@ -324,7 +354,8 @@ class Delivery:
             self.state = "pickup"
 
             self.feedback(
-                f"Shift {self.shift_number} ready. E: collect parcel."
+                f"Shift {self.shift_number}: "
+                f"{self.shift_name}. E: load."
             )
             return
 
@@ -426,7 +457,7 @@ class Delivery:
                 )
 
             if self.state == "pickup":
-                return f"E: COLLECT {self.contract.kind}"
+                return f"E: LOAD FOR {self.contract.name}"
 
             return f"E: DELIVER {self.cargo_status}"
 
@@ -463,13 +494,33 @@ class Delivery:
 
     def draw_marker(self, renderer):
         zone = self.zone
+        r = renderer.draw_rect
+
+        # Every destination has permanent, subdued parking paint.
+        # The active destination receives a bright parcel marker.
+        paint = (0.42, 0.55, 0.63, 0.55)
+
+        for destination in DESTINATIONS:
+            bay = destination.destination
+
+            if bay == zone:
+                continue
+
+            x, y, width, height = bay
+
+            r(x, y, width, 2, paint)
+            r(x, y + height - 2, width, 2, paint)
+            r(x, y, 2, height, paint)
+            r(x + width - 2, y, 2, height, paint)
+
+            self.draw_bay_name(
+                renderer, destination.name, bay, paint
+            )
 
         if zone is None:
             return
 
         x, y, width, height = zone
-        r = renderer.draw_rect
-
         colour = self.marker_colour
 
         pulse = (
@@ -489,6 +540,14 @@ class Delivery:
         r(x, y, 4, height, outline)
         r(x + width - 4, y, 4, height, outline)
 
+        name = (
+            self.contract.name
+            if self.state == "dropoff"
+            else "DEPOT"
+        )
+
+        self.draw_bay_name(renderer, name, zone, colour)
+
         # Parcel symbol in the active bay.
         cx = x + width / 2
         cy = y + height / 2
@@ -496,6 +555,19 @@ class Delivery:
         r(cx - 10, cy - 9, 20, 18, colour)
         r(cx - 1, cy - 9, 2, 18, WHITE)
         r(cx - 10, cy - 1, 20, 2, WHITE)
+
+    def draw_bay_name(self, renderer, name, zone, tint):
+        x, y, width, _ = zone
+        text_width = len(name) * 6 - 1
+
+        lettering(
+            renderer,
+            name,
+            x + (width - text_width) / 2,
+            y - 12,
+            tint,
+            scale=1,
+        )
 
     def draw_guidance(
         self, renderer, camera, hud_height
