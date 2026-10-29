@@ -112,6 +112,7 @@ def main():
             car.reset()
             delivery.reset()
             traffic.reset()
+            audio.reset_state()
 
         while running:
             frame_time = min(
@@ -250,8 +251,11 @@ def main():
                 car.sync_render_state()
                 traffic.sync_render_state()
 
-            audio.set_paused(
-                mode != "playing" or not focused
+            audio.update(
+                car,
+                delivery,
+                mode,
+                focused,
             )
 
             alpha = max(
