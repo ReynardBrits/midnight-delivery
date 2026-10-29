@@ -1,0 +1,391 @@
+import ctypes
+
+import pygame
+from OpenGL import GL
+from OpenGL.GL.shaders import compileProgram, compileShader
+
+
+HUD_HEIGHT = 104
+
+WHITE = (235, 242, 247)
+MUTED = (156, 176, 194)
+TEAL = (58, 214, 200)
+AMBER = (255, 190, 91)
+DIVIDER = (57, 75, 94)
+
+
+VERTEX_SHADER = """
+#version 330 core
+
+layout (location = 0) in vec2 aPosition;
+layout (location = 1) in vec2 aUV;
+
+out vec2 vUV;
+
+void main()
+{
+    gl_Position = vec4(aPosition, 0.0, 1.0);
+    vUV = aUV;
+}
+"""
+
+
+FRAGMENT_SHADER = """
+#version 330 core
+
+in vec2 vUV;
+out vec4 fragmentColour;
+
+uniform sampler2D uTexture;
+
+void main()
+{
+    fragmentColour = texture(uTexture, vUV);
+}
+"""
+
+
+def compose_dashboard(
+    surface, fonts, speed, direction, sound_status, max_speed
+):
+    """Draw the interface into a reusable PyGame surface."""
+    width = surface.get_width()
+    surface.fill((18, 27, 45, 245))
+
+    pygame.draw.rect(
+        surface, TEAL, (0, 0, width, 3)
+    )
+
+    pygame.draw.line(
+        surface, DIVIDER, (360, 18), (360, 88)
+    )
+
+    pygame.draw.line(
+        surface, DIVIDER, (650, 18), (650, 88)
+    )
+
+    def text(
+        message, position, font="body", colour=WHITE
+    ):
+        image = fonts[font].render(
+            message, True, colour
+        )
+        surface.blit(image, position)
+
+    text(
+        "MIDNIGHT DELIVERY",
+        (24, 15),
+        "title",
+    )
+
+    text(
+        "EXPLORE THE TOWN",
+        (24, 47),
+        "body",
+        TEAL,
+    )
+
+    sound_colour = (
+        TEAL if sound_status == "On" else AMBER
+    )
+
+    text(
+        f"SOUND: {sound_status.upper()}",
+        (24, 78),
+        "small",
+        sound_colour,
+    )
+
+    text("SPEED", (384, 12), "small", MUTED)
+    text(f"{speed:03d}", (384, 34), "speed")
+    text("px/s", (462, 51), "small", MUTED)
+
+    direction_colour = (
+        AMBER
+        if direction in ("BRAKING", "REVERSE")
+        else TEAL
+    )
+
+    text(
+        direction,
+        (535, 47),
+        "body",
+        direction_colour,
+    )
+
+    pygame.draw.rect(
+        surface, DIVIDER, (384, 83, 238, 6)
+    )
+
+    fraction = max(
+        0.0, min(speed / max_speed, 1.0)
+    )
+
+    if fraction > 0.0:
+        pygame.draw.rect(
+            surface,
+            direction_colour,
+            (384, 83, round(238 * fraction), 6),
+        )
+
+    text(
+        "WASD / ARROWS   DRIVE",
+        (682, 16),
+    )
+
+    text(
+        "SPACE   BRAKE    R   RESET",
+        (682, 46),
+    )
+
+    text(
+        "M   SOUND    ESC   EXIT",
+        (682, 76),
+        "small",
+        MUTED,
+    )
+
+
+class Hud:
+    def __init__(self, width, height):
+        pygame.font.init()
+
+        self.width = width
+
+        self.surface = pygame.Surface(
+            (width, HUD_HEIGHT),
+            pygame.SRCALPHA,
+        )
+
+        # None selects the font bundled with PyGame.
+        self.fonts = {
+            "title": pygame.font.Font(None, 28),
+            "body": pygame.font.Font(None, 22),
+            "small": pygame.font.Font(None, 18),
+            "speed": pygame.font.Font(None, 42),
+        }
+
+        self.last_state = None
+        self.next_refresh = 0
+
+        self.program = compileProgram(
+            compileShader(
+                VERTEX_SHADER,
+                GL.GL_VERTEX_SHADER,
+            ),
+            compileShader(
+                FRAGMENT_SHADER,
+                GL.GL_FRAGMENT_SHADER,
+            ),
+        )
+
+        top = -1.0 + 2.0 * HUD_HEIGHT / height
+
+        # Position X/Y followed by texture U/V.
+        # Top vertices use V=0 because pixels are unflipped.
+        vertices = (
+            -1.0, top, 0.0, 0.0,
+             1.0, top, 1.0, 0.0,
+             1.0, -1.0, 1.0, 1.0,
+            -1.0, top, 0.0, 0.0,
+             1.0, -1.0, 1.0, 1.0,
+            -1.0, -1.0, 0.0, 1.0,
+        )
+
+        data = (
+            ctypes.c_float * len(vertices)
+        )(*vertices)
+
+        stride = 4 * ctypes.sizeof(
+            ctypes.c_float
+        )
+
+        self.vao = GL.glGenVertexArrays(1)
+        self.vbo = GL.glGenBuffers(1)
+
+        GL.glBindVertexArray(self.vao)
+        GL.glBindBuffer(
+            GL.GL_ARRAY_BUFFER,
+            self.vbo,
+        )
+
+        GL.glBufferData(
+            GL.GL_ARRAY_BUFFER,
+            ctypes.sizeof(data),
+            data,
+            GL.GL_STATIC_DRAW,
+        )
+
+        GL.glVertexAttribPointer(
+            0,
+            2,
+            GL.GL_FLOAT,
+            GL.GL_FALSE,
+            stride,
+            ctypes.c_void_p(0),
+        )
+
+        GL.glEnableVertexAttribArray(0)
+
+        GL.glVertexAttribPointer(
+            1,
+            2,
+            GL.GL_FLOAT,
+            GL.GL_FALSE,
+            stride,
+            ctypes.c_void_p(
+                2 * ctypes.sizeof(ctypes.c_float)
+            ),
+        )
+
+        GL.glEnableVertexAttribArray(1)
+
+        GL.glBindVertexArray(0)
+        GL.glBindBuffer(
+            GL.GL_ARRAY_BUFFER, 0
+        )
+
+        self.texture = GL.glGenTextures(1)
+
+        GL.glBindTexture(
+            GL.GL_TEXTURE_2D,
+            self.texture,
+        )
+
+        for parameter in (
+            GL.GL_TEXTURE_MIN_FILTER,
+            GL.GL_TEXTURE_MAG_FILTER,
+        ):
+            GL.glTexParameteri(
+                GL.GL_TEXTURE_2D,
+                parameter,
+                GL.GL_LINEAR,
+            )
+
+        for parameter in (
+            GL.GL_TEXTURE_WRAP_S,
+            GL.GL_TEXTURE_WRAP_T,
+        ):
+            GL.glTexParameteri(
+                GL.GL_TEXTURE_2D,
+                parameter,
+                GL.GL_CLAMP_TO_EDGE,
+            )
+
+        GL.glTexImage2D(
+            GL.GL_TEXTURE_2D,
+            0,
+            GL.GL_RGBA8,
+            width,
+            HUD_HEIGHT,
+            0,
+            GL.GL_RGBA,
+            GL.GL_UNSIGNED_BYTE,
+            None,
+        )
+
+        GL.glBindTexture(
+            GL.GL_TEXTURE_2D, 0
+        )
+
+        GL.glUseProgram(self.program)
+
+        GL.glUniform1i(
+            GL.glGetUniformLocation(
+                self.program,
+                "uTexture",
+            ),
+            0,
+        )
+
+        GL.glUseProgram(0)
+
+    def draw(self, car, audio):
+        if car.braking:
+            direction = "BRAKING"
+        elif car.speed < -1.0:
+            direction = "REVERSE"
+        elif car.speed > 1.0:
+            direction = "FORWARD"
+        else:
+            direction = "STOPPED"
+
+        state = (
+            round(abs(car.speed)),
+            direction,
+            audio.status,
+        )
+
+        now = pygame.time.get_ticks()
+
+        GL.glActiveTexture(GL.GL_TEXTURE0)
+
+        GL.glBindTexture(
+            GL.GL_TEXTURE_2D,
+            self.texture,
+        )
+
+        # Refresh changed text at most ten times per second.
+        if self.last_state is None or (
+            state != self.last_state
+            and now >= self.next_refresh
+        ):
+            compose_dashboard(
+                self.surface,
+                self.fonts,
+                *state,
+                car.MAX_SPEED,
+            )
+
+            pixels = pygame.image.tobytes(
+                self.surface,
+                "RGBA",
+                False,
+            )
+
+            GL.glTexSubImage2D(
+                GL.GL_TEXTURE_2D,
+                0,
+                0,
+                0,
+                self.width,
+                HUD_HEIGHT,
+                GL.GL_RGBA,
+                GL.GL_UNSIGNED_BYTE,
+                pixels,
+            )
+
+            self.last_state = state
+            self.next_refresh = now + 100
+
+        GL.glUseProgram(self.program)
+        GL.glBindVertexArray(self.vao)
+
+        GL.glDrawArrays(
+            GL.GL_TRIANGLES, 0, 6
+        )
+
+        GL.glBindVertexArray(0)
+
+        GL.glBindTexture(
+            GL.GL_TEXTURE_2D, 0
+        )
+
+        GL.glUseProgram(0)
+
+    def close(self):
+        GL.glDeleteTextures(
+            [self.texture]
+        )
+
+        GL.glDeleteBuffers(
+            1, [self.vbo]
+        )
+
+        GL.glDeleteVertexArrays(
+            1, [self.vao]
+        )
+
+        GL.glDeleteProgram(
+            self.program
+        )

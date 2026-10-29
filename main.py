@@ -5,6 +5,7 @@ from OpenGL import GL
 from audio import Audio
 from camera import Camera, CameraRenderer
 from car import Car
+from hud import Hud
 from renderer import Renderer
 from world import World, BACKGROUND
 
@@ -21,6 +22,7 @@ def main():
     pygame.display.init()
 
     renderer = None
+    hud = None
     audio = None
 
     try:
@@ -45,6 +47,11 @@ def main():
         pygame.display.set_caption("Midnight Delivery")
 
         renderer = Renderer(
+            WINDOW_WIDTH,
+            WINDOW_HEIGHT,
+        )
+
+        hud = Hud(
             WINDOW_WIDTH,
             WINDOW_HEIGHT,
         )
@@ -189,10 +196,12 @@ def main():
             camera.follow(target_x, target_y)
 
             renderer.begin_frame(BACKGROUND)
+
             world.draw(world_renderer)
             car.draw(world_renderer, alpha)
-            renderer.end_frame()
+            hud.draw(car, audio)
 
+            renderer.end_frame()
             pygame.display.flip()
 
             caption_timer += frame_time
@@ -208,6 +217,9 @@ def main():
                 caption_timer = 0.0
 
     finally:
+        if hud is not None:
+            hud.close()
+
         if audio is not None:
             audio.close()
 
