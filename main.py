@@ -8,6 +8,7 @@ from car import Car
 from delivery import Delivery
 from hud import Hud, HUD_HEIGHT
 from renderer import Renderer
+from screens import Screens
 from traffic import Traffic
 from world import World, BACKGROUND
 
@@ -25,6 +26,7 @@ def main():
 
     renderer = None
     hud = None
+    screens = None
     audio = None
 
     try:
@@ -54,6 +56,11 @@ def main():
         )
 
         hud = Hud(
+            WINDOW_WIDTH,
+            WINDOW_HEIGHT,
+        )
+
+        screens = Screens(
             WINDOW_WIDTH,
             WINDOW_HEIGHT,
         )
@@ -90,7 +97,8 @@ def main():
         print("A / D or Left / Right: steer")
 
         print(
-            "Space: strong brake | E: interact | M: mute"
+            "Enter: start/resume/replay | P: pause"
+            " | Space: strong brake | E: interact | M: mute"
             " | R: restart night | Escape: exit"
         )
 
@@ -98,6 +106,12 @@ def main():
         accumulator = 0.0
         caption_timer = 0.0
         running = True
+        mode = "title"
+
+        def restart_night():
+            car.reset()
+            delivery.reset()
+            traffic.reset()
 
         while running:
             frame_time = min(
@@ -117,24 +131,60 @@ def main():
                         audio.toggle_mute()
 
                     elif event.key == pygame.K_e:
-                        if pygame.key.get_focused():
+                        if (
+                            mode == "playing"
+                            and pygame.key.get_focused()
+                        ):
                             delivery.interact(car)
 
                     elif event.key == pygame.K_r:
-                        car.reset()
-                        delivery.reset()
-                        traffic.reset()
+                        restart_night()
                         accumulator = 0.0
+                        mode = "playing"
+
+                    elif event.key in (
+                        pygame.K_RETURN,
+                        pygame.K_KP_ENTER,
+                    ):
+                        if pygame.key.get_focused():
+                            if mode == "paused":
+                                mode = "playing"
+
+                            elif mode in (
+                                "title",
+                                "complete",
+                                "game_over",
+                            ):
+                                restart_night()
+                                accumulator = 0.0
+                                mode = "playing"
+
+                    elif event.key == pygame.K_p:
+                        if pygame.key.get_focused():
+                            if mode == "playing":
+                                mode = "paused"
+
+                            elif mode == "paused":
+                                mode = "playing"
 
             if not running:
                 break
 
             focused = pygame.key.get_focused()
-            audio.set_paused(not focused)
+
+            if mode in ("playing", "paused"):
+                if delivery.state == "complete":
+                    mode = "complete"
+
+                elif car.disabled:
+                    mode = "game_over"
+
+                elif mode == "playing" and not focused:
+                    mode = "paused"
 
             traffic.set_shift(delivery.shift_number)
 
-            if focused:
+            if mode == "playing" and focused:
                 keys = pygame.key.get_pressed()
 
                 forward = (
@@ -188,13 +238,21 @@ def main():
                     accumulator -= PHYSICS_STEP
                     updates += 1
 
+                    if car.disabled:
+                        mode = "game_over"
+                        break
+
                 if accumulator >= PHYSICS_STEP:
                     accumulator %= PHYSICS_STEP
 
-            else:
+            if mode != "playing":
                 accumulator = 0.0
                 car.sync_render_state()
                 traffic.sync_render_state()
+
+            audio.set_paused(
+                mode != "playing" or not focused
+            )
 
             alpha = max(
                 0.0,
@@ -221,13 +279,22 @@ def main():
 
             car.draw(world_renderer, alpha)
 
-            delivery.draw_guidance(
-                renderer,
-                camera,
-                HUD_HEIGHT,
-            )
+            if mode == "playing":
+                delivery.draw_guidance(
+                    renderer,
+                    camera,
+                    HUD_HEIGHT,
+                )
 
-            hud.draw(car, audio, delivery)
+                hud.draw(car, audio, delivery)
+
+            else:
+                screens.draw(
+                    mode,
+                    delivery,
+                    car,
+                    audio,
+                )
 
             renderer.end_frame()
             pygame.display.flip()
@@ -235,17 +302,32 @@ def main():
             caption_timer += frame_time
 
             if caption_timer >= 0.2:
-                pygame.display.set_caption(
-                    "Midnight Delivery"
-                    f" | Speed: {abs(car.speed):.0f} px/s"
-                    f" | Sound: {audio.status} (M)"
-                    f" | Traffic: {traffic.active_count}"
-                    " | R: restart night | Escape: exit"
-                )
+                if mode == "playing":
+                    caption = (
+                        "Midnight Delivery"
+                        f" | Speed: {abs(car.speed):.0f} px/s"
+                        f" | Sound: {audio.status} (M)"
+                        f" | Traffic: {traffic.active_count}"
+                        " | P: pause | R: restart night | Escape: exit"
+                    )
 
+                else:
+                    label = (
+                        mode.replace("_", " ").title()
+                    )
+
+                    caption = (
+                        f"Midnight Delivery | {label}"
+                        " | Enter: continue | Escape: exit"
+                    )
+
+                pygame.display.set_caption(caption)
                 caption_timer = 0.0
 
     finally:
+        if screens is not None:
+            screens.close()
+
         if hud is not None:
             hud.close()
 
