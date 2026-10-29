@@ -14,23 +14,51 @@ class Contract:
     destination: tuple[int, int, int, int]
     reward: int = 100
     time_limit: float = 90.0
+    kind: str = "STANDARD"
 
 
 SHIFTS = (
     (
-        Contract("HARBOUR OFFICE", HARBOUR_ZONE, 100, 90.0),
-        Contract("NIGHT MARKET", MARKET_ZONE, 100, 75.0),
-        Contract("PARK ENTRANCE", PARK_ZONE, 100, 60.0),
+        Contract(
+            "HARBOUR OFFICE", HARBOUR_ZONE,
+            100, 90.0,
+        ),
+        Contract(
+            "NIGHT MARKET", MARKET_ZONE,
+            125, 90.0, "FRAGILE",
+        ),
+        Contract(
+            "PARK ENTRANCE", PARK_ZONE,
+            150, 40.0, "EXPRESS",
+        ),
     ),
     (
-        Contract("NIGHT MARKET", MARKET_ZONE, 125, 65.0),
-        Contract("PARK ENTRANCE", PARK_ZONE, 125, 50.0),
-        Contract("HARBOUR OFFICE", HARBOUR_ZONE, 125, 75.0),
+        Contract(
+            "NIGHT MARKET", MARKET_ZONE,
+            175, 50.0, "EXPRESS",
+        ),
+        Contract(
+            "PARK ENTRANCE", PARK_ZONE,
+            125, 50.0,
+        ),
+        Contract(
+            "HARBOUR OFFICE", HARBOUR_ZONE,
+            150, 95.0, "FRAGILE",
+        ),
     ),
     (
-        Contract("PARK ENTRANCE", PARK_ZONE, 150, 40.0),
-        Contract("HARBOUR OFFICE", HARBOUR_ZONE, 150, 60.0),
-        Contract("NIGHT MARKET", MARKET_ZONE, 150, 55.0),
+        Contract(
+            "PARK ENTRANCE", PARK_ZONE,
+            175, 60.0, "FRAGILE",
+        ),
+        Contract(
+            "HARBOUR OFFICE", HARBOUR_ZONE,
+            200, 50.0, "EXPRESS",
+        ),
+        Contract(
+            "NIGHT MARKET", MARKET_ZONE,
+            150, 55.0,
+        ),
     ),
 )
 
@@ -39,11 +67,13 @@ TEAL = (0.227, 0.839, 0.784, 1.0)
 AMBER = (1.000, 0.745, 0.357, 1.0)
 WHITE = (0.950, 0.970, 0.930, 1.0)
 CORAL = (1.000, 0.420, 0.400, 1.0)
+LILAC = (0.730, 0.600, 1.000, 1.0)
 
 
 class Delivery:
     STOP_SPEED = 10.0
     MAX_TIME_BONUS = 50
+    FRAGILE_DAMAGE_MULTIPLIER = 2.0
 
     def __init__(self):
         self.reset()
@@ -55,6 +85,9 @@ class Delivery:
         self.completed_count = 0
         self.score = 0
         self.time_left = 0.0
+
+        self.cargo_condition = 100.0
+        self.previous_car_condition = 100.0
 
         self.elapsed = 0.0
         self.message = ""
@@ -102,7 +135,10 @@ class Delivery:
             )
 
         if self.state == "pickup":
-            return f"{progress} COLLECT AT DEPOT"
+            return (
+                f"{progress} DEPOT - "
+                f"{self.contract.kind}"
+            )
 
         if self.state == "dropoff":
             return (
@@ -138,6 +174,38 @@ class Delivery:
         return int(self.MAX_TIME_BONUS * fraction)
 
     @property
+    def cargo_status(self):
+        if self.contract.kind == "FRAGILE":
+            return (
+                "FRAGILE "
+                f"{math.ceil(self.cargo_condition)}%"
+            )
+
+        if (
+            self.contract.kind == "EXPRESS"
+            and self.time_left <= 0.0
+        ):
+            return "EXPRESS LATE"
+
+        return self.contract.kind
+
+    def calculate_reward(self):
+        if (
+            self.contract.kind == "EXPRESS"
+            and self.time_left <= 0.0
+        ):
+            return self.contract.reward // 2
+
+        reward = self.contract.reward + self.time_bonus
+
+        if self.contract.kind == "FRAGILE":
+            reward = math.floor(
+                reward * self.cargo_condition / 100.0
+            )
+
+        return reward
+
+    @property
     def marker_colour(self):
         if self.state in ("pickup", "handover"):
             return TEAL
@@ -145,9 +213,12 @@ class Delivery:
         if self.time_left <= 15.0:
             return CORAL
 
+        if self.contract.kind == "FRAGILE":
+            return LILAC
+
         return AMBER
 
-    def update(self, dt):
+    def update(self, dt, car):
         self.elapsed = (self.elapsed + dt) % 2.0
 
         self.message_time = max(
@@ -155,8 +226,38 @@ class Delivery:
             self.message_time - dt,
         )
 
+        # Compare actual vehicle damage.
+        # Braking alone therefore cannot damage cargo.
+        damage = max(
+            0.0,
+            self.previous_car_condition - car.condition,
+        )
+
+        self.previous_car_condition = car.condition
+
+        if (
+            self.state == "dropoff"
+            and self.contract.kind == "FRAGILE"
+            and damage > 0.0
+        ):
+            self.cargo_condition = max(
+                0.0,
+                self.cargo_condition
+                - damage * self.FRAGILE_DAMAGE_MULTIPLIER,
+            )
+
+            self.feedback(
+                "Fragile parcel: "
+                f"{math.ceil(self.cargo_condition)}% intact."
+            )
+
+        if car.disabled:
+            return
+
         # main.py calls this only while the game has focus.
         if self.state == "dropoff":
+            was_on_time = self.time_left > 0.0
+
             self.time_left = max(
                 0.0,
                 self.time_left - dt,
@@ -165,6 +266,15 @@ class Delivery:
             # Remove tiny floating-point remainders.
             if self.time_left < 0.000001:
                 self.time_left = 0.0
+
+            if (
+                was_on_time
+                and self.time_left == 0.0
+                and self.contract.kind == "EXPRESS"
+            ):
+                self.feedback(
+                    "Express late: base reward halved."
+                )
 
     def contains(self, car):
         zone = self.zone
@@ -221,15 +331,48 @@ class Delivery:
         if self.state == "pickup":
             self.state = "dropoff"
             self.time_left = self.contract.time_limit
+            self.cargo_condition = 100.0
 
-            self.feedback(
-                "Parcel loaded. Timer started."
-            )
+            # Existing vehicle damage must not be applied
+            # to a newly collected parcel.
+            self.previous_car_condition = car.condition
+
+            if self.contract.kind == "FRAGILE":
+                self.feedback(
+                    "Fragile loaded. Avoid crashes."
+                )
+
+            elif self.contract.kind == "EXPRESS":
+                self.feedback(
+                    "Express loaded. Late = half pay."
+                )
+
+            else:
+                self.feedback(
+                    "Standard loaded. Timer started."
+                )
+
             return
 
-        # Bonus is proportional to unused delivery time.
-        bonus = self.time_bonus
-        reward = self.contract.reward + bonus
+        reward = self.calculate_reward()
+
+        if self.contract.kind == "FRAGILE":
+            receipt = (
+                f"+{reward} pts. "
+                f"Parcel {math.ceil(self.cargo_condition)}%."
+            )
+
+        elif (
+            self.contract.kind == "EXPRESS"
+            and self.time_left <= 0.0
+        ):
+            receipt = f"+{reward} pts. Late: half pay."
+
+        else:
+            receipt = (
+                f"+{reward} pts "
+                f"(+{self.time_bonus} time)."
+            )
 
         self.score += reward
         self.completed_count += 1
@@ -256,7 +399,7 @@ class Delivery:
             self.state = "pickup"
 
             self.feedback(
-                f"+{reward} pts (+{bonus} time). Depot next."
+                f"{receipt} Depot next."
             )
 
     def prompt(self, car):
@@ -278,13 +421,14 @@ class Delivery:
                 return "Stop first: hold SPACE."
 
             if self.state == "handover":
-                return f"E: START SHIFT {self.shift_number + 1}"
+                return (
+                    f"E: START SHIFT {self.shift_number + 1}"
+                )
 
-            return (
-                "E: COLLECT PARCEL"
-                if self.state == "pickup"
-                else "E: DELIVER PARCEL"
-            )
+            if self.state == "pickup":
+                return f"E: COLLECT {self.contract.kind}"
+
+            return f"E: DELIVER {self.cargo_status}"
 
         x, y, width, height = zone
 
@@ -306,7 +450,16 @@ class Delivery:
         bearing = vertical + horizontal or "NEARBY"
         distance = round(math.hypot(dx, dy))
 
-        return f"TARGET: {bearing} - {distance} px"
+        if self.state == "handover":
+            status = "DEPOT"
+
+        elif self.state == "pickup":
+            status = self.contract.kind
+
+        else:
+            status = self.cargo_status
+
+        return f"{status} | {bearing} {distance}px"
 
     def draw_marker(self, renderer):
         zone = self.zone

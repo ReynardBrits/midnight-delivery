@@ -86,9 +86,10 @@ def main():
         print("W / Up: accelerate")
         print("S / Down: brake, then reverse")
         print("A / D or Left / Right: steer")
+
         print(
             "Space: strong brake | E: interact | M: mute"
-            " | R: restart delivery | Escape: exit"
+            " | R: restart night | Escape: exit"
         )
 
         clock = pygame.time.Clock()
@@ -172,7 +173,10 @@ def main():
                         world.obstacles,
                     )
 
-                    delivery.update(PHYSICS_STEP)
+                    delivery.update(
+                        PHYSICS_STEP,
+                        car,
+                    )
 
                     accumulator -= PHYSICS_STEP
                     updates += 1
@@ -226,7 +230,7 @@ def main():
                     "Midnight Delivery"
                     f" | Speed: {abs(car.speed):.0f} px/s"
                     f" | Sound: {audio.status} (M)"
-                    " | R: restart delivery | Escape: exit"
+                    " | R: restart night | Escape: exit"
                 )
 
                 caption_timer = 0.0
