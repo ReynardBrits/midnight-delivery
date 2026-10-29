@@ -8,6 +8,7 @@ from car import Car
 from delivery import Delivery
 from hud import Hud, HUD_HEIGHT
 from renderer import Renderer
+from traffic import Traffic
 from world import World, BACKGROUND
 
 
@@ -62,6 +63,7 @@ def main():
         world = World()
         car = Car(*world.spawn)
         delivery = Delivery()
+        traffic = Traffic()
 
         camera = Camera(
             WINDOW_WIDTH,
@@ -121,6 +123,7 @@ def main():
                     elif event.key == pygame.K_r:
                         car.reset()
                         delivery.reset()
+                        traffic.reset()
                         accumulator = 0.0
 
             if not running:
@@ -128,6 +131,8 @@ def main():
 
             focused = pygame.key.get_focused()
             audio.set_paused(not focused)
+
+            traffic.set_shift(delivery.shift_number)
 
             if focused:
                 keys = pygame.key.get_pressed()
@@ -163,6 +168,8 @@ def main():
                     accumulator >= PHYSICS_STEP
                     and updates < MAX_UPDATES
                 ):
+                    traffic.update(PHYSICS_STEP, car)
+
                     car.update(
                         PHYSICS_STEP,
                         throttle,
@@ -170,7 +177,7 @@ def main():
                         braking,
                         world.width,
                         world.height,
-                        world.obstacles,
+                        world.obstacles + traffic.obstacles,
                     )
 
                     delivery.update(
@@ -187,6 +194,7 @@ def main():
             else:
                 accumulator = 0.0
                 car.sync_render_state()
+                traffic.sync_render_state()
 
             alpha = max(
                 0.0,
@@ -209,6 +217,7 @@ def main():
 
             world.draw(world_renderer)
             delivery.draw_marker(world_renderer)
+            traffic.draw(world_renderer, alpha)
 
             car.draw(world_renderer, alpha)
 
@@ -230,6 +239,7 @@ def main():
                     "Midnight Delivery"
                     f" | Speed: {abs(car.speed):.0f} px/s"
                     f" | Sound: {audio.status} (M)"
+                    f" | Traffic: {traffic.active_count}"
                     " | R: restart night | Escape: exit"
                 )
 
