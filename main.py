@@ -77,6 +77,7 @@ def main():
             WINDOW_HEIGHT,
             world.width,
             world.height,
+            bottom_margin=HUD_HEIGHT,
         )
 
         world_renderer = CameraRenderer(

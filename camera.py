@@ -3,10 +3,17 @@ import math
 
 class Camera:
     def __init__(
-        self, width, height, world_width, world_height
+        self, width, height, world_width, world_height,
+        bottom_margin=0,
     ):
         self.width = width
         self.height = height
+
+        # Reserve space for the bottom HUD.
+        self.view_height = max(
+            1, height - max(0, bottom_margin)
+        )
+
         self.world_width = world_width
         self.world_height = world_height
 
@@ -21,7 +28,7 @@ class Camera:
 
         max_y = max(
             0.0,
-            self.world_height - self.height,
+            self.world_height - self.view_height,
         )
 
         self.x = max(
@@ -31,7 +38,7 @@ class Camera:
 
         self.y = max(
             0.0,
-            min(target_y - self.height / 2, max_y),
+            min(target_y - self.view_height / 2, max_y),
         )
 
 
@@ -57,7 +64,7 @@ class CameraRenderer:
             centre_x + radius < 0
             or centre_x - radius > self.camera.width
             or centre_y + radius < 0
-            or centre_y - radius > self.camera.height
+            or centre_y - radius > self.camera.view_height
         ):
             return
 
@@ -86,7 +93,7 @@ class CameraRenderer:
             max(xs) < 0
             or min(xs) > self.camera.width
             or max(ys) < 0
-            or min(ys) > self.camera.height
+            or min(ys) > self.camera.view_height
         ):
             return
 
