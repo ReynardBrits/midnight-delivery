@@ -2,6 +2,7 @@ import pygame
 
 from OpenGL import GL
 
+from audio import Audio
 from camera import Camera, CameraRenderer
 from car import Car
 from renderer import Renderer
@@ -18,7 +19,9 @@ MAX_UPDATES = 12
 
 def main():
     pygame.display.init()
+
     renderer = None
+    audio = None
 
     try:
         pygame.display.gl_set_attribute(
@@ -45,6 +48,8 @@ def main():
             WINDOW_WIDTH,
             WINDOW_HEIGHT,
         )
+
+        audio = Audio()
 
         world = World()
         car = Car(*world.spawn)
@@ -73,7 +78,8 @@ def main():
         print("S / Down: brake, then reverse")
         print("A / D or Left / Right: steer")
         print(
-            "Space: strong brake | R: reset | Escape: exit"
+            "Space: strong brake | M: mute"
+            " | R: reset | Escape: exit"
         )
 
         clock = pygame.time.Clock()
@@ -95,6 +101,9 @@ def main():
                     if event.key == pygame.K_ESCAPE:
                         running = False
 
+                    elif event.key == pygame.K_m:
+                        audio.toggle_mute()
+
                     elif event.key == pygame.K_r:
                         car.reset()
                         accumulator = 0.0
@@ -102,7 +111,10 @@ def main():
             if not running:
                 break
 
-            if pygame.key.get_focused():
+            focused = pygame.key.get_focused()
+            audio.set_paused(not focused)
+
+            if focused:
                 keys = pygame.key.get_pressed()
 
                 forward = (
@@ -163,8 +175,7 @@ def main():
                 min(accumulator / PHYSICS_STEP, 1.0),
             )
 
-            # Use the same interpolated position for
-            # the camera and the displayed car.
+            # Match the camera to the interpolated car.
             target_x = (
                 car.previous_x
                 + (car.x - car.previous_x) * alpha
@@ -190,12 +201,16 @@ def main():
                 pygame.display.set_caption(
                     "Midnight Delivery"
                     f" | Speed: {abs(car.speed):.0f} px/s"
+                    f" | Sound: {audio.status} (M)"
                     " | R: reset | Escape: exit"
                 )
 
                 caption_timer = 0.0
 
     finally:
+        if audio is not None:
+            audio.close()
+
         if renderer is not None:
             renderer.close()
 
