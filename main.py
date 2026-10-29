@@ -2,8 +2,10 @@ import pygame
 
 from OpenGL import GL
 
+from camera import Camera, CameraRenderer
 from car import Car
 from renderer import Renderer
+from world import World, BACKGROUND
 
 
 WINDOW_WIDTH = 1280
@@ -12,96 +14,6 @@ TARGET_FPS = 60
 
 PHYSICS_STEP = 1.0 / 120.0
 MAX_UPDATES = 12
-
-BACKGROUND = (0.071, 0.106, 0.200, 1.0)
-ROAD = (0.180, 0.220, 0.290, 1.0)
-PAVEMENT = (0.300, 0.350, 0.420, 1.0)
-ROAD_MARKING = (0.760, 0.780, 0.750, 1.0)
-
-BUILDING = (0.160, 0.220, 0.330, 1.0)
-ROOF_EDGE = (0.230, 0.310, 0.430, 1.0)
-SHADOW = (0.035, 0.055, 0.100, 1.0)
-WINDOW_LIGHT = (1.000, 0.710, 0.280, 1.0)
-
-TEAL = (0.227, 0.839, 0.784, 1.0)
-
-# Each building is: x, y, width, height.
-# Drawing and collision checks use the same dimensions.
-BUILDINGS = (
-    (70, 55, 290, 140),
-    (730, 60, 200, 145),
-    (990, 60, 210, 145),
-    (70, 510, 175, 140),
-    (300, 510, 130, 140),
-    (740, 510, 430, 140),
-)
-
-
-def draw_building(renderer, x, y, width, height):
-    renderer.draw_rect(
-        x + 8, y + 8, width, height, SHADOW
-    )
-
-    renderer.draw_rect(
-        x, y, width, height, BUILDING
-    )
-
-    renderer.draw_rect(
-        x, y, width, 8, ROOF_EDGE
-    )
-
-    for window_x in range(
-        int(x + 20), int(x + width - 15), 40
-    ):
-        renderer.draw_rect(
-            window_x,
-            y + height - 14,
-            18,
-            6,
-            WINDOW_LIGHT,
-        )
-
-
-def draw_scene(renderer):
-    # Pavements and roads.
-    renderer.draw_rect(
-        488, 0, 184, WINDOW_HEIGHT, PAVEMENT
-    )
-
-    renderer.draw_rect(
-        0, 268, WINDOW_WIDTH, 184, PAVEMENT
-    )
-
-    renderer.draw_rect(
-        500, 0, 160, WINDOW_HEIGHT, ROAD
-    )
-
-    renderer.draw_rect(
-        0, 280, WINDOW_WIDTH, 160, ROAD
-    )
-
-    # Road markings.
-    for y in range(0, WINDOW_HEIGHT, 50):
-        if y + 26 <= 280 or y >= 440:
-            renderer.draw_rect(
-                578, y, 4, 26, ROAD_MARKING
-            )
-
-    for x in range(0, WINDOW_WIDTH, 50):
-        if x + 26 <= 500 or x >= 660:
-            renderer.draw_rect(
-                x, 358, 26, 4, ROAD_MARKING
-            )
-
-    # Buildings.
-    for building in BUILDINGS:
-        draw_building(renderer, *building)
-
-    # Depot loading bay.
-    renderer.draw_rect(150, 208, 130, 4, TEAL)
-    renderer.draw_rect(150, 254, 130, 4, TEAL)
-    renderer.draw_rect(150, 208, 4, 50, TEAL)
-    renderer.draw_rect(276, 208, 4, 50, TEAL)
 
 
 def main():
@@ -134,7 +46,20 @@ def main():
             WINDOW_HEIGHT,
         )
 
-        car = Car(540, 560)
+        world = World()
+        car = Car(*world.spawn)
+
+        camera = Camera(
+            WINDOW_WIDTH,
+            WINDOW_HEIGHT,
+            world.width,
+            world.height,
+        )
+
+        world_renderer = CameraRenderer(
+            renderer,
+            camera,
+        )
 
         version = GL.glGetString(GL.GL_VERSION)
 
@@ -216,9 +141,9 @@ def main():
                         throttle,
                         steering,
                         braking,
-                        WINDOW_WIDTH,
-                        WINDOW_HEIGHT,
-                        BUILDINGS,
+                        world.width,
+                        world.height,
+                        world.obstacles,
                     )
 
                     accumulator -= PHYSICS_STEP
@@ -238,9 +163,23 @@ def main():
                 min(accumulator / PHYSICS_STEP, 1.0),
             )
 
+            # Use the same interpolated position for
+            # the camera and the displayed car.
+            target_x = (
+                car.previous_x
+                + (car.x - car.previous_x) * alpha
+            )
+
+            target_y = (
+                car.previous_y
+                + (car.y - car.previous_y) * alpha
+            )
+
+            camera.follow(target_x, target_y)
+
             renderer.begin_frame(BACKGROUND)
-            draw_scene(renderer)
-            car.draw(renderer, alpha)
+            world.draw(world_renderer)
+            car.draw(world_renderer, alpha)
             renderer.end_frame()
 
             pygame.display.flip()
