@@ -46,9 +46,18 @@ void main()
 
 
 def compose_dashboard(
-    surface, fonts, speed, direction, sound_status, max_speed
+    surface, fonts, state, max_speed
 ):
     """Draw the interface into a reusable PyGame surface."""
+    (
+        speed,
+        direction,
+        sound_status,
+        objective,
+        prompt,
+        score,
+    ) = state
+
     width = surface.get_width()
     surface.fill((18, 27, 45, 245))
 
@@ -72,29 +81,9 @@ def compose_dashboard(
         )
         surface.blit(image, position)
 
-    text(
-        "MIDNIGHT DELIVERY",
-        (24, 15),
-        "title",
-    )
-
-    text(
-        "EXPLORE THE TOWN",
-        (24, 47),
-        "body",
-        TEAL,
-    )
-
-    sound_colour = (
-        TEAL if sound_status == "On" else AMBER
-    )
-
-    text(
-        f"SOUND: {sound_status.upper()}",
-        (24, 78),
-        "small",
-        sound_colour,
-    )
+    text("MIDNIGHT DELIVERY", (24, 15), "title")
+    text(objective, (24, 47), "body", TEAL)
+    text(prompt, (24, 78), "small", MUTED)
 
     text("SPEED", (384, 12), "small", MUTED)
     text(f"{speed:03d}", (384, 34), "speed")
@@ -129,17 +118,17 @@ def compose_dashboard(
         )
 
     text(
-        "WASD / ARROWS   DRIVE",
+        "E   INTERACT    R   RESTART",
         (682, 16),
     )
 
     text(
-        "SPACE   BRAKE    R   RESET",
+        f"SCORE: {score}    SOUND: {sound_status.upper()}",
         (682, 46),
     )
 
     text(
-        "M   SOUND    ESC   EXIT",
+        "WASD / ARROWS   SPACE BRAKE   M SOUND   ESC EXIT",
         (682, 76),
         "small",
         MUTED,
@@ -157,7 +146,6 @@ class Hud:
             pygame.SRCALPHA,
         )
 
-        # None selects the font bundled with PyGame.
         self.fonts = {
             "title": pygame.font.Font(None, 28),
             "body": pygame.font.Font(None, 22),
@@ -182,7 +170,6 @@ class Hud:
         top = -1.0 + 2.0 * HUD_HEIGHT / height
 
         # Position X/Y followed by texture U/V.
-        # Top vertices use V=0 because pixels are unflipped.
         vertices = (
             -1.0, top, 0.0, 0.0,
              1.0, top, 1.0, 0.0,
@@ -196,18 +183,13 @@ class Hud:
             ctypes.c_float * len(vertices)
         )(*vertices)
 
-        stride = 4 * ctypes.sizeof(
-            ctypes.c_float
-        )
+        stride = 4 * ctypes.sizeof(ctypes.c_float)
 
         self.vao = GL.glGenVertexArrays(1)
         self.vbo = GL.glGenBuffers(1)
 
         GL.glBindVertexArray(self.vao)
-        GL.glBindBuffer(
-            GL.GL_ARRAY_BUFFER,
-            self.vbo,
-        )
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
 
         GL.glBufferData(
             GL.GL_ARRAY_BUFFER,
@@ -217,21 +199,14 @@ class Hud:
         )
 
         GL.glVertexAttribPointer(
-            0,
-            2,
-            GL.GL_FLOAT,
-            GL.GL_FALSE,
-            stride,
-            ctypes.c_void_p(0),
+            0, 2, GL.GL_FLOAT, GL.GL_FALSE,
+            stride, ctypes.c_void_p(0),
         )
 
         GL.glEnableVertexAttribArray(0)
 
         GL.glVertexAttribPointer(
-            1,
-            2,
-            GL.GL_FLOAT,
-            GL.GL_FALSE,
+            1, 2, GL.GL_FLOAT, GL.GL_FALSE,
             stride,
             ctypes.c_void_p(
                 2 * ctypes.sizeof(ctypes.c_float)
@@ -241,9 +216,7 @@ class Hud:
         GL.glEnableVertexAttribArray(1)
 
         GL.glBindVertexArray(0)
-        GL.glBindBuffer(
-            GL.GL_ARRAY_BUFFER, 0
-        )
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
 
         self.texture = GL.glGenTextures(1)
 
@@ -284,23 +257,20 @@ class Hud:
             None,
         )
 
-        GL.glBindTexture(
-            GL.GL_TEXTURE_2D, 0
-        )
+        GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
 
         GL.glUseProgram(self.program)
 
         GL.glUniform1i(
             GL.glGetUniformLocation(
-                self.program,
-                "uTexture",
+                self.program, "uTexture"
             ),
             0,
         )
 
         GL.glUseProgram(0)
 
-    def draw(self, car, audio):
+    def draw(self, car, audio, delivery):
         if car.braking:
             direction = "BRAKING"
         elif car.speed < -1.0:
@@ -314,6 +284,9 @@ class Hud:
             round(abs(car.speed)),
             direction,
             audio.status,
+            delivery.objective,
+            delivery.prompt(car),
+            delivery.score,
         )
 
         now = pygame.time.get_ticks()
@@ -325,7 +298,6 @@ class Hud:
             self.texture,
         )
 
-        # Refresh changed text at most ten times per second.
         if self.last_state is None or (
             state != self.last_state
             and now >= self.next_refresh
@@ -333,14 +305,12 @@ class Hud:
             compose_dashboard(
                 self.surface,
                 self.fonts,
-                *state,
+                state,
                 car.MAX_SPEED,
             )
 
             pixels = pygame.image.tobytes(
-                self.surface,
-                "RGBA",
-                False,
+                self.surface, "RGBA", False
             )
 
             GL.glTexSubImage2D(
@@ -360,32 +330,14 @@ class Hud:
 
         GL.glUseProgram(self.program)
         GL.glBindVertexArray(self.vao)
-
-        GL.glDrawArrays(
-            GL.GL_TRIANGLES, 0, 6
-        )
+        GL.glDrawArrays(GL.GL_TRIANGLES, 0, 6)
 
         GL.glBindVertexArray(0)
-
-        GL.glBindTexture(
-            GL.GL_TEXTURE_2D, 0
-        )
-
+        GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
         GL.glUseProgram(0)
 
     def close(self):
-        GL.glDeleteTextures(
-            [self.texture]
-        )
-
-        GL.glDeleteBuffers(
-            1, [self.vbo]
-        )
-
-        GL.glDeleteVertexArrays(
-            1, [self.vao]
-        )
-
-        GL.glDeleteProgram(
-            self.program
-        )
+        GL.glDeleteTextures([self.texture])
+        GL.glDeleteBuffers(1, [self.vbo])
+        GL.glDeleteVertexArrays(1, [self.vao])
+        GL.glDeleteProgram(self.program)

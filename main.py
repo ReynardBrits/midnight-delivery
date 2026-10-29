@@ -5,7 +5,8 @@ from OpenGL import GL
 from audio import Audio
 from camera import Camera, CameraRenderer
 from car import Car
-from hud import Hud
+from delivery import Delivery
+from hud import Hud, HUD_HEIGHT
 from renderer import Renderer
 from world import World, BACKGROUND
 
@@ -60,6 +61,7 @@ def main():
 
         world = World()
         car = Car(*world.spawn)
+        delivery = Delivery()
 
         camera = Camera(
             WINDOW_WIDTH,
@@ -85,8 +87,8 @@ def main():
         print("S / Down: brake, then reverse")
         print("A / D or Left / Right: steer")
         print(
-            "Space: strong brake | M: mute"
-            " | R: reset | Escape: exit"
+            "Space: strong brake | E: interact | M: mute"
+            " | R: restart delivery | Escape: exit"
         )
 
         clock = pygame.time.Clock()
@@ -111,8 +113,13 @@ def main():
                     elif event.key == pygame.K_m:
                         audio.toggle_mute()
 
+                    elif event.key == pygame.K_e:
+                        if pygame.key.get_focused():
+                            delivery.interact(car)
+
                     elif event.key == pygame.K_r:
                         car.reset()
+                        delivery.reset()
                         accumulator = 0.0
 
             if not running:
@@ -165,6 +172,8 @@ def main():
                         world.obstacles,
                     )
 
+                    delivery.update(PHYSICS_STEP)
+
                     accumulator -= PHYSICS_STEP
                     updates += 1
 
@@ -172,8 +181,6 @@ def main():
                     accumulator %= PHYSICS_STEP
 
             else:
-                # Freeze movement while another window
-                # has keyboard focus.
                 accumulator = 0.0
                 car.sync_render_state()
 
@@ -182,7 +189,6 @@ def main():
                 min(accumulator / PHYSICS_STEP, 1.0),
             )
 
-            # Match the camera to the interpolated car.
             target_x = (
                 car.previous_x
                 + (car.x - car.previous_x) * alpha
@@ -198,8 +204,17 @@ def main():
             renderer.begin_frame(BACKGROUND)
 
             world.draw(world_renderer)
+            delivery.draw_marker(world_renderer)
+
             car.draw(world_renderer, alpha)
-            hud.draw(car, audio)
+
+            delivery.draw_guidance(
+                renderer,
+                camera,
+                HUD_HEIGHT,
+            )
+
+            hud.draw(car, audio, delivery)
 
             renderer.end_frame()
             pygame.display.flip()
@@ -211,7 +226,7 @@ def main():
                     "Midnight Delivery"
                     f" | Speed: {abs(car.speed):.0f} px/s"
                     f" | Sound: {audio.status} (M)"
-                    " | R: reset | Escape: exit"
+                    " | R: restart delivery | Escape: exit"
                 )
 
                 caption_timer = 0.0
