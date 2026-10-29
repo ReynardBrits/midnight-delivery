@@ -1,8 +1,32 @@
 import math
+from dataclasses import dataclass
 
 
 PICKUP_ZONE = (120, 206, 200, 60)
-DROPOFF_ZONE = (2292, 768, 116, 64)
+
+
+@dataclass(frozen=True)
+class Contract:
+    name: str
+    destination: tuple[int, int, int, int]
+    reward: int = 100
+
+
+CONTRACTS = (
+    Contract(
+        "HARBOUR OFFICE",
+        (2292, 768, 116, 64),
+    ),
+    Contract(
+        "NIGHT MARKET",
+        (760, 1320, 120, 64),
+    ),
+    Contract(
+        "PARK ENTRANCE",
+        (900, 232, 120, 56),
+    ),
+)
+
 
 TEAL = (0.227, 0.839, 0.784, 1.0)
 AMBER = (1.000, 0.745, 0.357, 1.0)
@@ -11,17 +35,23 @@ WHITE = (0.950, 0.970, 0.930, 1.0)
 
 class Delivery:
     STOP_SPEED = 10.0
-    REWARD = 100
 
     def __init__(self):
         self.reset()
 
     def reset(self):
         self.state = "pickup"
+        self.contract_index = 0
+        self.completed_count = 0
         self.score = 0
+
         self.elapsed = 0.0
         self.message = ""
         self.message_time = 0.0
+
+    @property
+    def contract(self) -> Contract:
+        return CONTRACTS[self.contract_index]
 
     @property
     def zone(self) -> tuple[int, int, int, int] | None:
@@ -29,19 +59,31 @@ class Delivery:
             return PICKUP_ZONE
 
         if self.state == "dropoff":
-            return DROPOFF_ZONE
+            return self.contract.destination
 
         return None
 
     @property
     def objective(self):
+        total = len(CONTRACTS)
+
+        progress = (
+            f"{self.contract_index + 1}/{total}"
+        )
+
         if self.state == "pickup":
-            return "COLLECT AT DEPOT"
+            return f"{progress} COLLECT AT DEPOT"
 
         if self.state == "dropoff":
-            return "DELIVER TO HARBOUR OFFICE"
+            return (
+                f"{progress} DELIVER TO "
+                f"{self.contract.name}"
+            )
 
-        return "DELIVERY COMPLETE"
+        return (
+            "SHIFT COMPLETE - "
+            f"{self.completed_count}/{total}"
+        )
 
     @property
     def marker_colour(self):
@@ -75,32 +117,49 @@ class Delivery:
     def interact(self, car):
         if self.state == "complete":
             self.feedback(
-                "Job complete. R starts a new run."
+                "Shift complete. R restarts the run."
             )
+            return
 
-        elif not self.contains(car):
+        if not self.contains(car):
             self.feedback(
                 "Move into the marked bay."
             )
+            return
 
-        elif abs(car.speed) > self.STOP_SPEED:
+        if abs(car.speed) > self.STOP_SPEED:
             self.feedback(
                 "Stop first: hold SPACE."
             )
+            return
 
-        elif self.state == "pickup":
+        if self.state == "pickup":
             self.state = "dropoff"
 
             self.feedback(
-                "Parcel collected. Follow the waypoint."
+                f"Collected: {self.contract.name}."
+            )
+            return
+
+        # A valid drop-off awards points and advances the list.
+        reward = self.contract.reward
+
+        self.score += reward
+        self.completed_count += 1
+
+        if self.completed_count == len(CONTRACTS):
+            self.state = "complete"
+
+            self.feedback(
+                f"Shift finished! Total: {self.score} points."
             )
 
         else:
-            self.state = "complete"
-            self.score += self.REWARD
+            self.contract_index += 1
+            self.state = "pickup"
 
             self.feedback(
-                "Delivered! +100 points. R to replay."
+                f"+{reward} points. Return to depot."
             )
 
     def prompt(self, car):
@@ -110,7 +169,7 @@ class Delivery:
         zone = self.zone
 
         if zone is None:
-            return "Job complete. Press R to replay."
+            return "All deliveries done. R to replay."
 
         if self.contains(car):
             if abs(car.speed) > self.STOP_SPEED:
