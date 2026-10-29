@@ -25,6 +25,17 @@ WINDOW_LIGHT = (1.000, 0.710, 0.280, 1.0)
 
 TEAL = (0.227, 0.839, 0.784, 1.0)
 
+# Each building is: x, y, width, height.
+# Drawing and collision checks use the same dimensions.
+BUILDINGS = (
+    (70, 55, 290, 140),
+    (730, 60, 200, 145),
+    (990, 60, 210, 145),
+    (70, 510, 175, 140),
+    (300, 510, 130, 140),
+    (740, 510, 430, 140),
+)
+
 
 def draw_building(renderer, x, y, width, height):
     renderer.draw_rect(
@@ -83,12 +94,8 @@ def draw_scene(renderer):
             )
 
     # Buildings.
-    draw_building(renderer, 70, 55, 290, 140)
-    draw_building(renderer, 730, 60, 200, 145)
-    draw_building(renderer, 990, 60, 210, 145)
-    draw_building(renderer, 70, 510, 175, 140)
-    draw_building(renderer, 300, 510, 130, 140)
-    draw_building(renderer, 740, 510, 430, 140)
+    for building in BUILDINGS:
+        draw_building(renderer, *building)
 
     # Depot loading bay.
     renderer.draw_rect(150, 208, 130, 4, TEAL)
@@ -211,6 +218,7 @@ def main():
                         braking,
                         WINDOW_WIDTH,
                         WINDOW_HEIGHT,
+                        BUILDINGS,
                     )
 
                     accumulator -= PHYSICS_STEP

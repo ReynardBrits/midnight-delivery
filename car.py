@@ -30,6 +30,46 @@ def approach(value, target, change):
     return max(value - change, target)
 
 
+def overlaps_building(
+    x, y, angle, half_width, half_height, building
+):
+    """Check a rotated car against a rectangular building."""
+    left, top, width, height = building
+
+    dx = x - (left + width / 2)
+    dy = y - (top + height / 2)
+
+    radians = math.radians(angle)
+    c = math.cos(radians)
+    s = math.sin(radians)
+
+    # Test the world axes and the rotated car axes.
+    for axis_x, axis_y in (
+        (1.0, 0.0),
+        (0.0, 1.0),
+        (c, s),
+        (-s, c),
+    ):
+        distance = abs(
+            dx * axis_x + dy * axis_y
+        )
+
+        car_radius = (
+            half_width * abs(c * axis_x + s * axis_y)
+            + half_height * abs(-s * axis_x + c * axis_y)
+        )
+
+        building_radius = (
+            width / 2 * abs(axis_x)
+            + height / 2 * abs(axis_y)
+        )
+
+        if distance >= car_radius + building_radius - 0.000001:
+            return False
+
+    return True
+
+
 class Car:
     MAX_SPEED = 300.0
     REVERSE_SPEED = 90.0
@@ -38,7 +78,9 @@ class Car:
     STRONG_BRAKING = 520.0
     COASTING = 80.0
     TURN_SPEED = 150.0
-    BOUNDARY_MARGIN = 35.0
+
+    HALF_WIDTH = 20.0
+    HALF_HEIGHT = 28.0
 
     def __init__(self, x, y):
         self.start_x = float(x)
@@ -50,6 +92,7 @@ class Car:
         self.y = self.start_y
         self.angle = 0.0
         self.speed = 0.0
+        self.colliding = False
         self.sync_render_state()
 
     def sync_render_state(self):
@@ -59,9 +102,12 @@ class Car:
 
     def update(
         self, dt, throttle, steering, braking,
-        world_width, world_height,
+        world_width, world_height, obstacles=(),
     ):
         self.sync_render_state()
+
+        was_colliding = self.colliding
+        self.colliding = False
 
         if braking:
             self.speed = approach(
@@ -76,9 +122,7 @@ class Car:
             )
 
             target = (
-                0.0
-                if self.speed < 0
-                else self.MAX_SPEED
+                0.0 if self.speed < 0 else self.MAX_SPEED
             )
 
             self.speed = approach(
@@ -93,9 +137,7 @@ class Car:
             )
 
             target = (
-                0.0
-                if self.speed > 0
-                else -self.REVERSE_SPEED
+                0.0 if self.speed > 0 else -self.REVERSE_SPEED
             )
 
             self.speed = approach(
@@ -107,7 +149,6 @@ class Car:
                 self.speed, 0.0, self.COASTING * dt
             )
 
-        # Steering becomes stronger as the car gains speed.
         steering_strength = min(
             abs(self.speed) / 100.0, 1.0
         )
@@ -116,38 +157,109 @@ class Car:
             -1.0 if self.speed < 0 else 1.0
         )
 
-        self.angle = (
+        next_angle = (
             self.angle
             + steering * self.TURN_SPEED
             * steering_strength * travel_direction * dt
         ) % 360.0
 
+        # Prevent rotation into a building or map boundary.
+        if not self.is_blocked(
+            self.x,
+            self.y,
+            next_angle,
+            world_width,
+            world_height,
+            obstacles,
+        ):
+            self.angle = next_angle
+        else:
+            self.colliding = True
+
         radians = math.radians(self.angle)
 
-        self.x += math.sin(radians) * self.speed * dt
-        self.y -= math.cos(radians) * self.speed * dt
+        move_x = math.sin(radians) * self.speed * dt
+        move_y = -math.cos(radians) * self.speed * dt
 
-        # Keep the whole car inside the current scene.
-        margin = self.BOUNDARY_MARGIN
+        old_x = self.x
+        old_y = self.y
 
-        clamped_x = max(
-            margin,
-            min(self.x, world_width - margin),
+        # Check each axis separately so the car can
+        # move along a wall during a glancing collision.
+        if not self.is_blocked(
+            self.x + move_x,
+            self.y,
+            self.angle,
+            world_width,
+            world_height,
+            obstacles,
+        ):
+            self.x += move_x
+        else:
+            self.colliding = True
+
+        if not self.is_blocked(
+            self.x,
+            self.y + move_y,
+            self.angle,
+            world_width,
+            world_height,
+            obstacles,
+        ):
+            self.y += move_y
+        else:
+            self.colliding = True
+
+        if self.colliding:
+            distance_squared = (
+                (self.x - old_x) ** 2
+                + (self.y - old_y) ** 2
+            )
+
+            if distance_squared < 0.000001:
+                self.speed = 0.0
+
+            elif not was_colliding:
+                # Reduce speed on first contact.
+                self.speed *= 0.35
+
+    def is_blocked(
+        self, x, y, angle,
+        world_width, world_height, obstacles,
+    ):
+        radians = math.radians(angle)
+
+        extent_x = (
+            abs(math.cos(radians)) * self.HALF_WIDTH
+            + abs(math.sin(radians)) * self.HALF_HEIGHT
         )
 
-        clamped_y = max(
-            margin,
-            min(self.y, world_height - margin),
+        extent_y = (
+            abs(math.sin(radians)) * self.HALF_WIDTH
+            + abs(math.cos(radians)) * self.HALF_HEIGHT
         )
 
-        if clamped_x != self.x or clamped_y != self.y:
-            self.speed = 0.0
+        if (
+            x - extent_x < 0
+            or x + extent_x > world_width
+            or y - extent_y < 0
+            or y + extent_y > world_height
+        ):
+            return True
 
-        self.x = clamped_x
-        self.y = clamped_y
+        return any(
+            overlaps_building(
+                x,
+                y,
+                angle,
+                self.HALF_WIDTH,
+                self.HALF_HEIGHT,
+                building,
+            )
+            for building in obstacles
+        )
 
     def draw(self, renderer, alpha):
-        # Interpolate between physics updates.
         x = (
             self.previous_x
             + (self.x - self.previous_x) * alpha
@@ -170,7 +282,6 @@ class Car:
         c = math.cos(radians)
         s = math.sin(radians)
 
-        # Rotate every part around the same car centre.
         for left, top, width, height, colour in CAR_PARTS:
             local_x = left + width / 2
             local_y = top + height / 2
