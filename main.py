@@ -290,9 +290,13 @@ def main():
                     HUD_HEIGHT,
                 )
 
+                # Draw the shape batch before the textured HUD.
+                renderer.flush()
                 hud.draw(car, audio, delivery)
 
             else:
+                renderer.flush()
+
                 screens.draw(
                     mode,
                     delivery,

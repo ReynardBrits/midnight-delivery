@@ -1,3 +1,4 @@
+from array import array
 import ctypes
 import math
 
@@ -9,30 +10,20 @@ VERTEX_SHADER = """
 #version 330 core
 
 layout (location = 0) in vec2 aPosition;
+layout (location = 1) in vec4 aColour;
 
 uniform vec2 uResolution;
-uniform vec2 uCentre;
-uniform vec2 uSize;
-uniform float uAngle;
+out vec4 vColour;
 
 void main()
 {
-    vec2 localPosition = aPosition * uSize;
-
-    float c = cos(uAngle);
-    float s = sin(uAngle);
-
-    mat2 rotation = mat2(c, s, -s, c);
-
-    vec2 pixelPosition =
-        uCentre + rotation * localPosition;
-
     vec2 screenPosition = vec2(
-        pixelPosition.x / uResolution.x * 2.0 - 1.0,
-        1.0 - pixelPosition.y / uResolution.y * 2.0
+        aPosition.x / uResolution.x * 2.0 - 1.0,
+        1.0 - aPosition.y / uResolution.y * 2.0
     );
 
     gl_Position = vec4(screenPosition, 0.0, 1.0);
+    vColour = aColour;
 }
 """
 
@@ -40,40 +31,34 @@ void main()
 FRAGMENT_SHADER = """
 #version 330 core
 
+in vec4 vColour;
 out vec4 fragmentColour;
-
-uniform vec4 uColour;
 
 void main()
 {
-    fragmentColour = uColour;
+    fragmentColour = vColour;
 }
 """
 
 
 class Renderer:
+    """Collect coloured shapes and draw them as one ordered batch."""
+
     def __init__(self, width, height):
         self.width = width
         self.height = height
+        self.vertices = array("f")
 
         self.program = compileProgram(
-            compileShader(VERTEX_SHADER, GL.GL_VERTEX_SHADER),
-            compileShader(FRAGMENT_SHADER, GL.GL_FRAGMENT_SHADER),
+            compileShader(
+                VERTEX_SHADER,
+                GL.GL_VERTEX_SHADER,
+            ),
+            compileShader(
+                FRAGMENT_SHADER,
+                GL.GL_FRAGMENT_SHADER,
+            ),
         )
-
-        # Two triangles form one rectangle.
-        vertices = (
-            -0.5, -0.5,
-             0.5, -0.5,
-             0.5,  0.5,
-            -0.5, -0.5,
-             0.5,  0.5,
-            -0.5,  0.5,
-        )
-
-        vertex_data = (
-            ctypes.c_float * len(vertices)
-        )(*vertices)
 
         self.vao = GL.glGenVertexArrays(1)
         self.vbo = GL.glGenBuffers(1)
@@ -83,41 +68,40 @@ class Renderer:
 
         GL.glBufferData(
             GL.GL_ARRAY_BUFFER,
-            ctypes.sizeof(vertex_data),
-            vertex_data,
-            GL.GL_STATIC_DRAW,
+            144,
+            None,
+            GL.GL_STREAM_DRAW,
         )
 
+        stride = 6 * ctypes.sizeof(ctypes.c_float)
+
         GL.glVertexAttribPointer(
-            0,
-            2,
-            GL.GL_FLOAT,
-            GL.GL_FALSE,
-            2 * ctypes.sizeof(ctypes.c_float),
-            ctypes.c_void_p(0),
+            0, 2, GL.GL_FLOAT, GL.GL_FALSE,
+            stride, ctypes.c_void_p(0),
         )
 
         GL.glEnableVertexAttribArray(0)
+
+        GL.glVertexAttribPointer(
+            1, 4, GL.GL_FLOAT, GL.GL_FALSE,
+            stride,
+            ctypes.c_void_p(
+                2 * ctypes.sizeof(ctypes.c_float)
+            ),
+        )
+
+        GL.glEnableVertexAttribArray(1)
+
         GL.glBindVertexArray(0)
         GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
 
         self.resolution_location = GL.glGetUniformLocation(
-            self.program, "uResolution"
-        )
-        self.centre_location = GL.glGetUniformLocation(
-            self.program, "uCentre"
-        )
-        self.size_location = GL.glGetUniformLocation(
-            self.program, "uSize"
-        )
-        self.angle_location = GL.glGetUniformLocation(
-            self.program, "uAngle"
-        )
-        self.colour_location = GL.glGetUniformLocation(
-            self.program, "uColour"
+            self.program,
+            "uResolution",
         )
 
         GL.glEnable(GL.GL_BLEND)
+
         GL.glBlendFunc(
             GL.GL_SRC_ALPHA,
             GL.GL_ONE_MINUS_SRC_ALPHA,
@@ -126,11 +110,77 @@ class Renderer:
         GL.glViewport(0, 0, width, height)
 
     def begin_frame(self, colour):
+        self.vertices = array("f")
         GL.glClearColor(*colour)
         GL.glClear(GL.GL_COLOR_BUFFER_BIT)
 
+    def draw_quad(self, points, colour):
+        """Add a convex four-corner shape in perimeter order."""
+        p0, p1, p2, p3 = points
+
+        self.vertices.extend((
+            *p0, *colour,
+            *p1, *colour,
+            *p2, *colour,
+            *p0, *colour,
+            *p2, *colour,
+            *p3, *colour,
+        ))
+
+    def draw_rect(
+        self, x, y, width, height, colour, angle=0.0
+    ):
+        if angle == 0.0:
+            points = (
+                (x, y),
+                (x + width, y),
+                (x + width, y + height),
+                (x, y + height),
+            )
+
+        else:
+            radians = math.radians(angle)
+            c = math.cos(radians)
+            s = math.sin(radians)
+
+            cx = x + width / 2
+            cy = y + height / 2
+            hw = width / 2
+            hh = height / 2
+
+            points = tuple(
+                (
+                    cx + px * c - py * s,
+                    cy + px * s + py * c,
+                )
+                for px, py in (
+                    (-hw, -hh),
+                    (hw, -hh),
+                    (hw, hh),
+                    (-hw, hh),
+                )
+            )
+
+        self.draw_quad(points, colour)
+
+    def flush(self):
+        """Draw queued shapes before drawing textured UI."""
+        if not self.vertices:
+            return
+
+        pixels = self.vertices.tobytes()
+        count = len(self.vertices) // 6
+
         GL.glUseProgram(self.program)
         GL.glBindVertexArray(self.vao)
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
+
+        GL.glBufferData(
+            GL.GL_ARRAY_BUFFER,
+            len(pixels),
+            pixels,
+            GL.GL_STREAM_DRAW,
+        )
 
         GL.glUniform2f(
             self.resolution_location,
@@ -138,34 +188,20 @@ class Renderer:
             self.height,
         )
 
-    def draw_rect(
-        self, x, y, width, height, colour, angle=0.0
-    ):
-        GL.glUniform2f(
-            self.centre_location,
-            x + width / 2,
-            y + height / 2,
+        GL.glDrawArrays(
+            GL.GL_TRIANGLES,
+            0,
+            count,
         )
 
-        GL.glUniform2f(
-            self.size_location,
-            width,
-            height,
-        )
+        GL.glBindVertexArray(0)
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+        GL.glUseProgram(0)
 
-        GL.glUniform1f(
-            self.angle_location,
-            math.radians(angle),
-        )
-
-        GL.glUniform4f(
-            self.colour_location,
-            *colour,
-        )
-
-        GL.glDrawArrays(GL.GL_TRIANGLES, 0, 6)
+        self.vertices = array("f")
 
     def end_frame(self):
+        self.flush()
         GL.glBindVertexArray(0)
         GL.glUseProgram(0)
 

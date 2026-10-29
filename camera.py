@@ -15,16 +15,20 @@ class Camera:
 
     def follow(self, target_x, target_y):
         max_x = max(
-            0.0, self.world_width - self.width
+            0.0,
+            self.world_width - self.width,
         )
+
         max_y = max(
-            0.0, self.world_height - self.height
+            0.0,
+            self.world_height - self.height,
         )
 
         self.x = max(
             0.0,
             min(target_x - self.width / 2, max_x),
         )
+
         self.y = max(
             0.0,
             min(target_y - self.height / 2, max_y),
@@ -47,7 +51,6 @@ class CameraRenderer:
         centre_x = screen_x + width / 2
         centre_y = screen_y + height / 2
 
-        # This also covers the corners of rotated rectangles.
         radius = math.hypot(width, height) / 2
 
         if (
@@ -65,4 +68,29 @@ class CameraRenderer:
             height,
             colour,
             angle=angle,
+        )
+
+    def draw_quad(self, points, colour):
+        screen_points = tuple(
+            (
+                x - self.camera.x,
+                y - self.camera.y,
+            )
+            for x, y in points
+        )
+
+        xs = [point[0] for point in screen_points]
+        ys = [point[1] for point in screen_points]
+
+        if (
+            max(xs) < 0
+            or min(xs) > self.camera.width
+            or max(ys) < 0
+            or min(ys) > self.camera.height
+        ):
+            return
+
+        self.renderer.draw_quad(
+            screen_points,
+            colour,
         )

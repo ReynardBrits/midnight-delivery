@@ -15,6 +15,7 @@ def colour(hex_value, alpha=1.0):
         int(hex_value[i:i + 2], 16) / 255.0
         for i in (0, 2, 4)
     )
+
     return rgb + (alpha,)
 
 
@@ -186,7 +187,6 @@ class World:
         for y in HORIZONTAL_ROADS:
             r(0, y, WATER_X, ROAD_WIDTH, ROAD)
 
-        # Leave clear space around junctions and crossings.
         for x in VERTICAL_ROADS:
             for y in range(0, WORLD_HEIGHT, 50):
                 near_junction = any(
@@ -209,181 +209,327 @@ class World:
                 if not near_junction:
                     r(x, y + 78, 26, 4, MARKING)
 
-        # Four zebra crossings around each junction.
         for x in VERTICAL_ROADS:
             for y in HORIZONTAL_ROADS:
                 for offset in range(12, 145, 20):
                     r(
-                        x + offset,
-                        y - 32,
-                        12,
-                        20,
-                        MARKING,
+                        x + offset, y - 32,
+                        12, 20, MARKING,
                     )
 
                     r(
-                        x + offset,
-                        y + 172,
-                        12,
-                        20,
-                        MARKING,
+                        x + offset, y + 172,
+                        12, 20, MARKING,
                     )
 
                     r(
-                        x - 32,
-                        y + offset,
-                        20,
-                        12,
-                        MARKING,
+                        x - 32, y + offset,
+                        20, 12, MARKING,
                     )
 
                     r(
-                        x + 172,
-                        y + offset,
-                        20,
-                        12,
-                        MARKING,
+                        x + 172, y + offset,
+                        20, 12, MARKING,
                     )
 
-    def draw_building(self, renderer, building, index):
-        r = renderer.draw_rect
-        x, y, width, height = building
-        is_depot = index == 0
+    def building_style(self, building, index):
+        x, _, _, height = building
 
-        if is_depot or 660 <= x < 1460:
-            roof = COMMERCIAL
+        if index == 0:
+            roof, depth = COMMERCIAL, 36
+
         elif x < 660:
             roof = RESIDENTIAL
+            depth = 40 + (index % 2) * 8
+
+        elif x < 1460:
+            roof = COMMERCIAL
+            depth = 48 + (index % 2) * 8
+
         else:
             roof = INDUSTRIAL
+            depth = 32 + (index % 3) * 6
 
-        r(x + 9, y + 10, width, height, SHADOW)
-        r(x, y, width, height, ROOF_EDGE)
-        r(x + 6, y + 6, width - 12, height - 12, roof)
+        depth = min(depth, int(height * 0.4))
 
-        # Roof seams and a raised central ridge.
-        for seam_y in range(
-            y + 30,
-            y + height - 18,
-            32,
-        ):
-            r(x + 9, seam_y, width - 18, 2, ROOF_LINE)
+        return roof, depth, round(depth * 0.4)
 
-        r(
-            x + width / 2 - 2,
-            y + 8,
-            4,
-            height - 16,
-            ROOF_EDGE,
+    def draw_building_shadow(
+        self, renderer, building, index
+    ):
+        x, y, width, height = building
+
+        _, depth, _ = self.building_style(
+            building, index
         )
 
-        # Skylights with a small reflected highlight.
-        for light_x in range(
-            x + 18,
-            x + width - 40,
-            56,
-        ):
-            r(light_x, y + 20, 28, 18, ROOF_EDGE)
-            r(light_x + 3, y + 23, 22, 12, GLASS)
-            r(light_x + 4, y + 24, 18, 2, METAL)
+        sx = depth * 0.7
+        sy = depth * 0.4
+        shade = colour("070D1A", 0.42)
 
-        # Ventilation unit.
-        r(
-            x + width - 38,
-            y + height - 52,
-            22,
-            22,
-            ROOF_EDGE,
+        renderer.draw_rect(
+            x + 2, y + 3,
+            width, height,
+            shade,
         )
 
-        r(
-            x + width - 36,
-            y + height - 50,
-            18,
-            16,
-            METAL,
+        renderer.draw_quad((
+            (x + width, y),
+            (x + width + sx, y + sy),
+            (x + width + sx, y + height + sy),
+            (x + width, y + height),
+        ), shade)
+
+        renderer.draw_quad((
+            (x, y + height),
+            (x + width, y + height),
+            (x + width + sx, y + height + sy),
+            (x + sx, y + height + sy),
+        ), shade)
+
+    def draw_building(
+        self, renderer, building, index
+    ):
+        r = renderer.draw_rect
+        q = renderer.draw_quad
+
+        x, y, width, height = building
+
+        roof, depth, dx = self.building_style(
+            building, index
         )
 
-        for vent_y in range(
-            y + height - 47,
-            y + height - 35,
-            4,
+        rw = width - dx
+        rh = height - depth
+
+        def shade(value, factor):
+            return tuple(
+                min(1.0, c * factor)
+                for c in value[:3]
+            ) + (value[3],)
+
+        # Solid faces fit inside the collision rectangle.
+        q((
+            (x, y + rh),
+            (x + rw, y + rh),
+            (x + width, y + height),
+            (x + dx, y + height),
+        ), shade(roof, 0.78))
+
+        q((
+            (x + rw, y),
+            (x + width, y + depth),
+            (x + width, y + height),
+            (x + rw, y + rh),
+        ), shade(roof, 0.52))
+
+        def facade(
+            left, top, face_width, face_height,
+            face_colour,
         ):
-            r(
-                x + width - 33,
-                vent_y,
-                12,
-                2,
-                ROOF_EDGE,
+            shift_top = dx * top / depth
+
+            shift_bottom = (
+                dx * (top + face_height) / depth
             )
 
-        # Warm windows along the front edge.
-        for window_x in range(
-            x + 18,
-            x + width - 28,
-            40,
+            q((
+                (
+                    x + left + shift_top,
+                    y + rh + top,
+                ),
+                (
+                    x + left + face_width + shift_top,
+                    y + rh + top,
+                ),
+                (
+                    x + left + face_width + shift_bottom,
+                    y + rh + top + face_height,
+                ),
+                (
+                    x + left + shift_bottom,
+                    y + rh + top + face_height,
+                ),
+            ), face_colour)
+
+        facade(
+            0, depth - 3,
+            rw, 3,
+            ROOF_EDGE,
+        )
+
+        rows = (
+            (8, 29) if depth >= 50 else (8,)
+        )
+
+        for row_index, row in enumerate(rows):
+            for column, left in enumerate(
+                range(16, rw - 25, 40)
+            ):
+                if index == 0 and 96 < left < 190:
+                    continue
+
+                light = (
+                    WINDOW_LIGHT
+                    if (index + column + row_index) % 4
+                    else GLASS
+                )
+
+                facade(
+                    left - 2, row - 2,
+                    24, 12,
+                    ROOF_EDGE,
+                )
+
+                facade(
+                    left, row,
+                    20, 8,
+                    light,
+                )
+
+        # Roof plane, parapet and highlights.
+        r(x, y, rw, rh, ROOF_EDGE)
+
+        r(
+            x + 4, y + 4,
+            rw - 8, rh - 8,
+            shade(roof, 1.12),
+        )
+
+        r(
+            x + 4, y + 4,
+            rw - 8, 3,
+            shade(roof, 1.45),
+        )
+
+        r(
+            x + 4, y + 4,
+            3, rh - 8,
+            shade(roof, 1.3),
+        )
+
+        r(
+            x + 4, y + rh - 7,
+            rw - 8, 3,
+            shade(roof, 0.7),
+        )
+
+        r(
+            x + rw - 7, y + 4,
+            3, rh - 8,
+            shade(roof, 0.65),
+        )
+
+        for seam_y in range(
+            y + 26, y + rh - 15, 30
         ):
             r(
-                window_x,
-                y + height - 14,
-                20,
-                6,
-                WINDOW_LIGHT,
+                x + 9, seam_y,
+                rw - 18, 2,
+                ROOF_LINE,
+            )
+
+        r(
+            x + rw / 2 - 2, y + 8,
+            4, rh - 16,
+            ROOF_EDGE,
+        )
+
+        r(
+            x + rw / 2 - 2, y + 8,
+            1, rh - 16,
+            shade(roof, 1.35),
+        )
+
+        for light_x in range(
+            x + 15, x + rw - 30, 56
+        ):
+            r(
+                light_x + 3, y + 20,
+                26, 17, SHADOW,
+            )
+
+            r(
+                light_x, y + 17,
+                26, 17, ROOF_EDGE,
+            )
+
+            r(
+                light_x + 3, y + 20,
+                20, 10, GLASS,
+            )
+
+            r(
+                light_x + 4, y + 20,
+                17, 2, METAL,
+            )
+
+        # Raised rooftop ventilation unit.
+        vx = x + rw - 35
+        vy = y + rh - 34
+
+        r(vx + 4, vy + 5, 22, 18, SHADOW)
+        r(vx, vy + 3, 22, 18, ROOF_EDGE)
+        r(vx, vy, 22, 16, METAL)
+
+        r(
+            vx + 2, vy + 2,
+            18, 2,
+            shade(METAL, 1.3),
+        )
+
+        for offset in (6, 9, 12):
+            r(
+                vx + 4, vy + offset,
+                14, 1, ROOF_EDGE,
             )
 
         if roof == COMMERCIAL:
-            for awning_x in range(
-                x + 8,
-                x + width - 8,
-                20,
-            ):
-                stripe_index = (
-                    (awning_x - x - 8) // 20
-                )
-
+            for left in range(8, rw - 8, 20):
                 stripe = (
                     TEAL
-                    if stripe_index % 2 == 0
+                    if ((left - 8) // 20) % 2 == 0
                     else TEAL_DARK
                 )
 
-                stripe_width = min(
-                    20,
-                    x + width - 8 - awning_x,
-                )
-
-                r(
-                    awning_x,
-                    y + height - 6,
-                    stripe_width,
-                    10,
+                facade(
+                    left,
+                    depth - 10,
+                    min(20, rw - 8 - left),
+                    8,
                     stripe,
                 )
 
-        if is_depot:
-            # A distinctive loading door and teal roof sign.
+        if index == 0:
+            # Loading door aligned with the depot bay.
+            door_left = 116 - dx
+
+            facade(
+                door_left, depth - 24,
+                68, 24, GLASS,
+            )
+
+            for offset in range(8, 64, 8):
+                facade(
+                    door_left + offset,
+                    depth - 23,
+                    1, 22,
+                    METAL,
+                )
+
             r(
-                x + 116,
-                y + height - 18,
-                68,
-                18,
-                GLASS,
+                x + rw / 2 - 43, y + 43,
+                86, 26, SHADOW,
             )
 
             r(
-                x + 110,
-                y + 48,
-                80,
-                24,
-                ROOF_EDGE,
+                x + rw / 2 - 43, y + 38,
+                86, 26, ROOF_EDGE,
             )
 
             r(
-                x + 116,
-                y + 54,
-                68,
-                12,
-                TEAL,
+                x + rw / 2 - 37, y + 44,
+                74, 14, TEAL,
             )
 
     def draw_park(self, renderer):
@@ -394,7 +540,6 @@ class World:
         r(720, 130, 480, 30, PARK_PATH)
 
         for x, y in TREES:
-            # Raised beds make the collision area visible.
             r(x - 24, y - 24, 48, 48, TREE_BED)
             r(x - 12, y - 13, 38, 38, SHADOW)
 
@@ -410,7 +555,6 @@ class World:
         r = renderer.draw_rect
 
         for x, y in LAMPS:
-            # Translucent shapes suggest pools of light.
             r(x - 36, y - 20, 72, 40, LAMP_GLOW)
             r(x - 24, y - 32, 48, 64, LAMP_GLOW)
             r(x - 18, y - 18, 36, 36, LAMP_GLOW)
@@ -426,10 +570,13 @@ class World:
         self.draw_park(renderer)
 
         for index, building in enumerate(self.buildings):
+            self.draw_building_shadow(
+                renderer, building, index
+            )
+
+        for index, building in enumerate(self.buildings):
             self.draw_building(
-                renderer,
-                building,
-                index,
+                renderer, building, index
             )
 
         # Depot loading bay.
