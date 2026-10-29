@@ -3,6 +3,9 @@ from dataclasses import dataclass
 
 
 PICKUP_ZONE = (120, 206, 200, 60)
+HARBOUR_ZONE = (2292, 768, 116, 64)
+MARKET_ZONE = (760, 1320, 120, 64)
+PARK_ZONE = (900, 232, 120, 56)
 
 
 @dataclass(frozen=True)
@@ -13,21 +16,21 @@ class Contract:
     time_limit: float = 90.0
 
 
-CONTRACTS = (
-    Contract(
-        "HARBOUR OFFICE",
-        (2292, 768, 116, 64),
-        time_limit=90.0,
+SHIFTS = (
+    (
+        Contract("HARBOUR OFFICE", HARBOUR_ZONE, 100, 90.0),
+        Contract("NIGHT MARKET", MARKET_ZONE, 100, 75.0),
+        Contract("PARK ENTRANCE", PARK_ZONE, 100, 60.0),
     ),
-    Contract(
-        "NIGHT MARKET",
-        (760, 1320, 120, 64),
-        time_limit=75.0,
+    (
+        Contract("NIGHT MARKET", MARKET_ZONE, 125, 65.0),
+        Contract("PARK ENTRANCE", PARK_ZONE, 125, 50.0),
+        Contract("HARBOUR OFFICE", HARBOUR_ZONE, 125, 75.0),
     ),
-    Contract(
-        "PARK ENTRANCE",
-        (900, 232, 120, 56),
-        time_limit=60.0,
+    (
+        Contract("PARK ENTRANCE", PARK_ZONE, 150, 40.0),
+        Contract("HARBOUR OFFICE", HARBOUR_ZONE, 150, 60.0),
+        Contract("NIGHT MARKET", MARKET_ZONE, 150, 55.0),
     ),
 )
 
@@ -47,6 +50,7 @@ class Delivery:
 
     def reset(self):
         self.state = "pickup"
+        self.shift_index = 0
         self.contract_index = 0
         self.completed_count = 0
         self.score = 0
@@ -57,12 +61,24 @@ class Delivery:
         self.message_time = 0.0
 
     @property
+    def shift_number(self):
+        return self.shift_index + 1
+
+    @property
+    def contracts(self) -> tuple[Contract, ...]:
+        return SHIFTS[self.shift_index]
+
+    @property
+    def total_deliveries(self):
+        return sum(len(shift) for shift in SHIFTS)
+
+    @property
     def contract(self) -> Contract:
-        return CONTRACTS[self.contract_index]
+        return self.contracts[self.contract_index]
 
     @property
     def zone(self) -> tuple[int, int, int, int] | None:
-        if self.state == "pickup":
+        if self.state in ("pickup", "handover"):
             return PICKUP_ZONE
 
         if self.state == "dropoff":
@@ -72,8 +88,18 @@ class Delivery:
 
     @property
     def objective(self):
-        total = len(CONTRACTS)
-        progress = f"{self.contract_index + 1}/{total}"
+        total = len(self.contracts)
+
+        progress = (
+            f"S{self.shift_number} "
+            f"{self.contract_index + 1}/{total}"
+        )
+
+        if self.state == "handover":
+            return (
+                f"SHIFT {self.shift_number}/{len(SHIFTS)} "
+                "DONE - DEPOT"
+            )
 
         if self.state == "pickup":
             return f"{progress} COLLECT AT DEPOT"
@@ -85,8 +111,8 @@ class Delivery:
             )
 
         return (
-            "SHIFT COMPLETE - "
-            f"{self.completed_count}/{total}"
+            "NIGHT COMPLETE - "
+            f"{self.completed_count}/{self.total_deliveries}"
         )
 
     @property
@@ -113,7 +139,7 @@ class Delivery:
 
     @property
     def marker_colour(self):
-        if self.state == "pickup":
+        if self.state in ("pickup", "handover"):
             return TEAL
 
         if self.time_left <= 15.0:
@@ -160,7 +186,7 @@ class Delivery:
     def interact(self, car):
         if self.state == "complete":
             self.feedback(
-                "Shift complete. R restarts the run."
+                "Night complete. R starts a new run."
             )
             return
 
@@ -173,6 +199,16 @@ class Delivery:
         if abs(car.speed) > self.STOP_SPEED:
             self.feedback(
                 "Stop first: hold SPACE."
+            )
+            return
+
+        if self.state == "handover":
+            self.shift_index += 1
+            self.contract_index = 0
+            self.state = "pickup"
+
+            self.feedback(
+                f"Shift {self.shift_number} ready. E: collect parcel."
             )
             return
 
@@ -193,12 +229,21 @@ class Delivery:
         self.completed_count += 1
         self.time_left = 0.0
 
-        if self.completed_count == len(CONTRACTS):
-            self.state = "complete"
+        if self.contract_index + 1 == len(self.contracts):
+            if self.shift_index + 1 == len(SHIFTS):
+                self.state = "complete"
 
-            self.feedback(
-                f"Shift finished! Total: {self.score} points."
-            )
+                self.feedback(
+                    f"Night finished! Total: {self.score} points."
+                )
+
+            else:
+                self.state = "handover"
+
+                self.feedback(
+                    f"Shift {self.shift_number} done! "
+                    f"+{reward} pts. Depot next."
+                )
 
         else:
             self.contract_index += 1
@@ -215,11 +260,16 @@ class Delivery:
         zone = self.zone
 
         if zone is None:
-            return "All deliveries done. R to replay."
+            return (
+                f"{self.total_deliveries} deliveries done. R to replay."
+            )
 
         if self.contains(car):
             if abs(car.speed) > self.STOP_SPEED:
                 return "Stop first: hold SPACE."
+
+            if self.state == "handover":
+                return f"E: START SHIFT {self.shift_number + 1}"
 
             return (
                 "E: COLLECT PARCEL"
