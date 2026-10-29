@@ -190,6 +190,12 @@ class Delivery:
             )
             return
 
+        if car.disabled:
+            self.feedback(
+                "Vehicle disabled. R restarts night."
+            )
+            return
+
         if not self.contains(car):
             self.feedback(
                 "Move into the marked bay."
@@ -254,6 +260,9 @@ class Delivery:
             )
 
     def prompt(self, car):
+        if car.disabled and self.state != "complete":
+            return "Vehicle disabled. R restarts night."
+
         if self.message_time > 0.0:
             return self.message
 

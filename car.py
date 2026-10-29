@@ -139,6 +139,11 @@ class Car:
     HALF_WIDTH = 20.0
     HALF_HEIGHT = 28.0
 
+    MIN_IMPACT_SPEED = 75.0
+    DAMAGE_SCALE = 0.1
+    MAX_IMPACT_DAMAGE = 30.0
+    DAMAGE_COOLDOWN = 0.6
+
     def __init__(self, x, y):
         self.start_x = float(x)
         self.start_y = float(y)
@@ -150,10 +155,19 @@ class Car:
         self.angle = 0.0
         self.speed = 0.0
 
+        self.condition = 100.0
+        self.impact_speed = 0.0
+        self.impact_cooldown = 0.0
+        self.impact_flash = 0.0
+
         self.colliding = False
         self.braking = False
 
         self.sync_render_state()
+
+    @property
+    def disabled(self):
+        return self.condition <= 0.0
 
     def sync_render_state(self):
         self.previous_x = self.x
@@ -165,6 +179,22 @@ class Car:
         world_width, world_height, obstacles=(),
     ):
         self.sync_render_state()
+
+        self.impact_speed = 0.0
+
+        self.impact_cooldown = max(
+            0.0, self.impact_cooldown - dt
+        )
+
+        self.impact_flash = max(
+            0.0, self.impact_flash - dt
+        )
+
+        if self.disabled:
+            self.speed = 0.0
+            self.braking = True
+            self.colliding = False
+            return
 
         # Opposite throttle also applies the service brake.
         self.braking = bool(
@@ -259,6 +289,7 @@ class Car:
 
         old_x = self.x
         old_y = self.y
+        impact = 0.0
 
         # Separate axis checks allow glancing movement
         # along walls.
@@ -274,6 +305,11 @@ class Car:
         else:
             self.colliding = True
 
+            impact = max(
+                impact,
+                abs(math.sin(radians) * self.speed),
+            )
+
         if not self.is_blocked(
             self.x,
             self.y + move_y,
@@ -286,6 +322,31 @@ class Car:
         else:
             self.colliding = True
 
+            impact = max(
+                impact,
+                abs(math.cos(radians) * self.speed),
+            )
+
+        # Only blocked movement causes damage. A rejected
+        # steering angle alone is not treated as a crash.
+        if (
+            impact > self.MIN_IMPACT_SPEED
+            and self.impact_cooldown <= 0.0
+        ):
+            damage = min(
+                self.MAX_IMPACT_DAMAGE,
+                (impact - self.MIN_IMPACT_SPEED)
+                * self.DAMAGE_SCALE,
+            )
+
+            self.condition = max(
+                0.0, self.condition - damage
+            )
+
+            self.impact_speed = impact
+            self.impact_cooldown = self.DAMAGE_COOLDOWN
+            self.impact_flash = 0.35
+
         if self.colliding:
             distance_squared = (
                 (self.x - old_x) ** 2
@@ -297,6 +358,9 @@ class Car:
 
             elif not was_colliding:
                 self.speed *= 0.35
+
+        if self.disabled:
+            self.speed = 0.0
 
     def is_blocked(
         self, x, y, angle,

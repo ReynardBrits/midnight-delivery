@@ -1,4 +1,5 @@
 import ctypes
+import math
 
 import pygame
 from OpenGL import GL
@@ -11,6 +12,7 @@ WHITE = (235, 242, 247)
 MUTED = (156, 176, 194)
 TEAL = (58, 214, 200)
 AMBER = (255, 190, 91)
+CORAL = (255, 107, 102)
 DIVIDER = (57, 75, 94)
 
 
@@ -56,6 +58,8 @@ def compose_dashboard(
         objective,
         prompt,
         score,
+        condition,
+        impact_flash,
     ) = state
 
     width = surface.get_width()
@@ -82,17 +86,37 @@ def compose_dashboard(
         surface.blit(image, position)
 
     text("MIDNIGHT DELIVERY", (24, 15), "title")
-    text(objective, (24, 47), "body", TEAL)
+
+    objective_colour = (
+        CORAL if direction == "DISABLED" else TEAL
+    )
+
+    text(objective, (24, 47), "body", objective_colour)
     text(prompt, (24, 78), "small", MUTED)
 
     text("SPEED", (384, 12), "small", MUTED)
     text(f"{speed:03d}", (384, 34), "speed")
     text("px/s", (462, 51), "small", MUTED)
 
-    direction_colour = (
-        AMBER
-        if direction in ("BRAKING", "REVERSE")
-        else TEAL
+    if direction == "DISABLED":
+        direction_colour = CORAL
+    elif direction in ("BRAKING", "REVERSE"):
+        direction_colour = AMBER
+    else:
+        direction_colour = TEAL
+
+    if impact_flash or condition <= 30:
+        condition_colour = CORAL
+    elif condition <= 60:
+        condition_colour = AMBER
+    else:
+        condition_colour = TEAL
+
+    text(
+        f"CAR: {condition}%",
+        (535, 12),
+        "small",
+        condition_colour,
     )
 
     text(
@@ -103,7 +127,7 @@ def compose_dashboard(
     )
 
     pygame.draw.rect(
-        surface, DIVIDER, (384, 83, 238, 6)
+        surface, DIVIDER, (384, 83, 128, 6)
     )
 
     fraction = max(
@@ -114,7 +138,18 @@ def compose_dashboard(
         pygame.draw.rect(
             surface,
             direction_colour,
-            (384, 83, round(238 * fraction), 6),
+            (384, 83, round(128 * fraction), 6),
+        )
+
+    pygame.draw.rect(
+        surface, DIVIDER, (535, 83, 87, 6)
+    )
+
+    if condition > 0:
+        pygame.draw.rect(
+            surface,
+            condition_colour,
+            (535, 83, round(87 * condition / 100), 6),
         )
 
     text(
@@ -271,7 +306,9 @@ class Hud:
         GL.glUseProgram(0)
 
     def draw(self, car, audio, delivery):
-        if car.braking:
+        if car.disabled:
+            direction = "DISABLED"
+        elif car.braking:
             direction = "BRAKING"
         elif car.speed < -1.0:
             direction = "REVERSE"
@@ -280,13 +317,22 @@ class Hud:
         else:
             direction = "STOPPED"
 
+        if car.disabled and delivery.state != "complete":
+            objective = "VEHICLE DISABLED"
+            prompt = "R: RESTART THE NIGHT"
+        else:
+            objective = delivery.objective
+            prompt = delivery.prompt(car)
+
         state = (
             round(abs(car.speed)),
             direction,
             audio.status,
-            delivery.objective,
-            delivery.prompt(car),
+            objective,
+            prompt,
             delivery.score,
+            math.ceil(car.condition),
+            car.impact_flash > 0.0,
         )
 
         now = pygame.time.get_ticks()
