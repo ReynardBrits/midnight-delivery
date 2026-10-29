@@ -2,23 +2,79 @@ import math
 
 
 CAR_BODY = (1.000, 0.710, 0.280, 1.0)
-CAR_GLASS = (0.090, 0.160, 0.240, 1.0)
-TYRE = (0.025, 0.035, 0.050, 1.0)
-HEADLIGHT = (1.000, 0.960, 0.760, 1.0)
-TAILLIGHT = (0.940, 0.260, 0.260, 1.0)
+CAR_EDGE = (0.650, 0.350, 0.130, 1.0)
+CAR_HIGHLIGHT = (1.000, 0.820, 0.440, 1.0)
 
+CAR_GLASS = (0.080, 0.160, 0.240, 1.0)
+GLASS_REFLECTION = (0.280, 0.450, 0.530, 1.0)
+
+TYRE = (0.025, 0.035, 0.050, 1.0)
+METAL = (0.390, 0.470, 0.550, 1.0)
+TEAL = (0.227, 0.839, 0.784, 1.0)
+
+PARCEL = (0.690, 0.470, 0.280, 1.0)
+PARCEL_TOP = (0.840, 0.650, 0.410, 1.0)
+PARCEL_TAPE = (0.960, 0.850, 0.610, 1.0)
+
+HEADLIGHT = (1.000, 0.960, 0.760, 1.0)
+TAILLIGHT = (0.550, 0.080, 0.100, 1.0)
+BRAKE_LIGHT = (1.000, 0.230, 0.180, 1.0)
+REVERSE_LIGHT = (0.900, 0.950, 1.000, 1.0)
+
+CAR_SHADOW = (0.020, 0.030, 0.050, 0.45)
+
+
+# Coordinates are relative to the car centre.
+# The front of the car points towards negative Y.
 CAR_PARTS = (
-    (-20, -21, 6, 13, TYRE),
-    (14, -21, 6, 13, TYRE),
-    (-20, 10, 6, 13, TYRE),
-    (14, 10, 6, 13, TYRE),
-    (-16, -28, 32, 56, CAR_BODY),
-    (-12, -15, 24, 13, CAR_GLASS),
-    (-11, 12, 22, 8, CAR_GLASS),
-    (-13, -28, 7, 4, HEADLIGHT),
-    (6, -28, 7, 4, HEADLIGHT),
-    (-13, 24, 7, 4, TAILLIGHT),
-    (6, 24, 7, 4, TAILLIGHT),
+    # Tyres.
+    (-20, -20, 6, 12, TYRE),
+    (14, -20, 6, 12, TYRE),
+    (-20, 10, 6, 12, TYRE),
+    (14, 10, 6, 12, TYRE),
+
+    # Stepped body silhouette and bumpers.
+    (-16, -24, 32, 48, CAR_EDGE),
+    (-13, -28, 26, 56, CAR_EDGE),
+    (-15, -23, 30, 46, CAR_BODY),
+    (-12, -26, 24, 52, CAR_BODY),
+    (-11, -28, 22, 2, METAL),
+    (-11, 26, 22, 2, METAL),
+
+    # Bonnet and courier stripe.
+    (-11, -23, 22, 8, CAR_HIGHLIGHT),
+    (-2, -24, 4, 9, TEAL),
+
+    # Windows and reflections.
+    (-12, -14, 24, 10, CAR_GLASS),
+    (-10, -13, 19, 2, GLASS_REFLECTION),
+    (-14, -1, 4, 14, CAR_GLASS),
+    (10, -1, 4, 14, CAR_GLASS),
+    (-10, 16, 20, 7, CAR_GLASS),
+    (-8, 17, 16, 2, GLASS_REFLECTION),
+
+    # Wing mirrors and door handles.
+    (-20, -5, 4, 6, CAR_EDGE),
+    (16, -5, 4, 6, CAR_EDGE),
+    (-19, -5, 2, 3, CAR_HIGHLIGHT),
+    (17, -5, 2, 3, CAR_HIGHLIGHT),
+    (-15, 8, 2, 4, METAL),
+    (13, 8, 2, 4, METAL),
+
+    # Roof rack and strapped parcel.
+    (-10, -2, 20, 18, TYRE),
+    (-10, -2, 3, 18, METAL),
+    (7, -2, 3, 18, METAL),
+    (-7, 0, 14, 13, PARCEL),
+    (-6, 0, 12, 10, PARCEL_TOP),
+    (-1, 0, 2, 13, PARCEL_TAPE),
+    (-7, 5, 14, 2, PARCEL_TAPE),
+    (-8, 12, 16, 2, TEAL),
+
+    # Headlights and rear number plate.
+    (-12, -26, 6, 4, HEADLIGHT),
+    (6, -26, 6, 4, HEADLIGHT),
+    (-4, 24, 8, 2, HEADLIGHT),
 )
 
 
@@ -33,7 +89,7 @@ def approach(value, target, change):
 def overlaps_building(
     x, y, angle, half_width, half_height, building
 ):
-    """Check a rotated car against a rectangular building."""
+    """Check a rotated car against a rectangular obstacle."""
     left, top, width, height = building
 
     dx = x - (left + width / 2)
@@ -73,6 +129,7 @@ def overlaps_building(
 class Car:
     MAX_SPEED = 300.0
     REVERSE_SPEED = 90.0
+
     ACCELERATION = 200.0
     BRAKING = 360.0
     STRONG_BRAKING = 520.0
@@ -92,7 +149,10 @@ class Car:
         self.y = self.start_y
         self.angle = 0.0
         self.speed = 0.0
+
         self.colliding = False
+        self.braking = False
+
         self.sync_render_state()
 
     def sync_render_state(self):
@@ -106,12 +166,21 @@ class Car:
     ):
         self.sync_render_state()
 
+        # Opposite throttle also applies the service brake.
+        self.braking = bool(
+            braking
+            or (throttle < 0 and self.speed > 0)
+            or (throttle > 0 and self.speed < 0)
+        )
+
         was_colliding = self.colliding
         self.colliding = False
 
         if braking:
             self.speed = approach(
-                self.speed, 0.0, self.STRONG_BRAKING * dt
+                self.speed,
+                0.0,
+                self.STRONG_BRAKING * dt,
             )
 
         elif throttle > 0:
@@ -126,7 +195,9 @@ class Car:
             )
 
             self.speed = approach(
-                self.speed, target, rate * dt
+                self.speed,
+                target,
+                rate * dt,
             )
 
         elif throttle < 0:
@@ -141,16 +212,21 @@ class Car:
             )
 
             self.speed = approach(
-                self.speed, target, rate * dt
+                self.speed,
+                target,
+                rate * dt,
             )
 
         else:
             self.speed = approach(
-                self.speed, 0.0, self.COASTING * dt
+                self.speed,
+                0.0,
+                self.COASTING * dt,
             )
 
         steering_strength = min(
-            abs(self.speed) / 100.0, 1.0
+            abs(self.speed) / 100.0,
+            1.0,
         )
 
         travel_direction = (
@@ -163,7 +239,7 @@ class Car:
             * steering_strength * travel_direction * dt
         ) % 360.0
 
-        # Prevent rotation into a building or map boundary.
+        # Prevent rotation into an obstacle or map boundary.
         if not self.is_blocked(
             self.x,
             self.y,
@@ -184,8 +260,8 @@ class Car:
         old_x = self.x
         old_y = self.y
 
-        # Check each axis separately so the car can
-        # move along a wall during a glancing collision.
+        # Separate axis checks allow glancing movement
+        # along walls.
         if not self.is_blocked(
             self.x + move_x,
             self.y,
@@ -220,7 +296,6 @@ class Car:
                 self.speed = 0.0
 
             elif not was_colliding:
-                # Reduce speed on first contact.
                 self.speed *= 0.35
 
     def is_blocked(
@@ -275,14 +350,15 @@ class Car:
         ) % 360.0 - 180.0
 
         angle = (
-            self.previous_angle + angle_change * alpha
+            self.previous_angle
+            + angle_change * alpha
         )
 
         radians = math.radians(angle)
         c = math.cos(radians)
         s = math.sin(radians)
 
-        for left, top, width, height, colour in CAR_PARTS:
+        def draw_part(left, top, width, height, colour):
             local_x = left + width / 2
             local_y = top + height / 2
 
@@ -297,3 +373,32 @@ class Car:
                 colour,
                 angle=angle,
             )
+
+        # Offset the shadow in world space.
+        renderer.draw_rect(
+            x - 16 + 5,
+            y - 26 + 7,
+            32,
+            52,
+            CAR_SHADOW,
+            angle=angle,
+        )
+
+        for part in CAR_PARTS:
+            draw_part(*part)
+
+        rear_colour = (
+            BRAKE_LIGHT
+            if self.braking
+            else TAILLIGHT
+        )
+
+        draw_part(-13, 23, 6, 3, rear_colour)
+        draw_part(7, 23, 6, 3, rear_colour)
+
+        if self.braking:
+            draw_part(-5, 21, 10, 2, BRAKE_LIGHT)
+
+        if self.speed < -1.0:
+            draw_part(-6, 24, 2, 2, REVERSE_LIGHT)
+            draw_part(4, 24, 2, 2, REVERSE_LIGHT)
