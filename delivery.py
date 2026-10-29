@@ -10,20 +10,24 @@ class Contract:
     name: str
     destination: tuple[int, int, int, int]
     reward: int = 100
+    time_limit: float = 90.0
 
 
 CONTRACTS = (
     Contract(
         "HARBOUR OFFICE",
         (2292, 768, 116, 64),
+        time_limit=90.0,
     ),
     Contract(
         "NIGHT MARKET",
         (760, 1320, 120, 64),
+        time_limit=75.0,
     ),
     Contract(
         "PARK ENTRANCE",
         (900, 232, 120, 56),
+        time_limit=60.0,
     ),
 )
 
@@ -31,10 +35,12 @@ CONTRACTS = (
 TEAL = (0.227, 0.839, 0.784, 1.0)
 AMBER = (1.000, 0.745, 0.357, 1.0)
 WHITE = (0.950, 0.970, 0.930, 1.0)
+CORAL = (1.000, 0.420, 0.400, 1.0)
 
 
 class Delivery:
     STOP_SPEED = 10.0
+    MAX_TIME_BONUS = 50
 
     def __init__(self):
         self.reset()
@@ -44,6 +50,7 @@ class Delivery:
         self.contract_index = 0
         self.completed_count = 0
         self.score = 0
+        self.time_left = 0.0
 
         self.elapsed = 0.0
         self.message = ""
@@ -66,18 +73,15 @@ class Delivery:
     @property
     def objective(self):
         total = len(CONTRACTS)
-
-        progress = (
-            f"{self.contract_index + 1}/{total}"
-        )
+        progress = f"{self.contract_index + 1}/{total}"
 
         if self.state == "pickup":
             return f"{progress} COLLECT AT DEPOT"
 
         if self.state == "dropoff":
             return (
-                f"{progress} DELIVER TO "
-                f"{self.contract.name}"
+                f"{progress} {self.contract.name} "
+                f"{self.timer_text}"
             )
 
         return (
@@ -86,8 +90,36 @@ class Delivery:
         )
 
     @property
+    def timer_text(self):
+        if self.time_left <= 0.0:
+            return "LATE"
+
+        seconds = math.ceil(self.time_left)
+        minutes, seconds = divmod(seconds, 60)
+
+        return f"{minutes:02d}:{seconds:02d}"
+
+    @property
+    def time_bonus(self):
+        fraction = max(
+            0.0,
+            min(
+                self.time_left / self.contract.time_limit,
+                1.0,
+            ),
+        )
+
+        return int(self.MAX_TIME_BONUS * fraction)
+
+    @property
     def marker_colour(self):
-        return TEAL if self.state == "pickup" else AMBER
+        if self.state == "pickup":
+            return TEAL
+
+        if self.time_left <= 15.0:
+            return CORAL
+
+        return AMBER
 
     def update(self, dt):
         self.elapsed = (self.elapsed + dt) % 2.0
@@ -96,6 +128,17 @@ class Delivery:
             0.0,
             self.message_time - dt,
         )
+
+        # main.py calls this only while the game has focus.
+        if self.state == "dropoff":
+            self.time_left = max(
+                0.0,
+                self.time_left - dt,
+            )
+
+            # Remove tiny floating-point remainders.
+            if self.time_left < 0.000001:
+                self.time_left = 0.0
 
     def contains(self, car):
         zone = self.zone
@@ -135,17 +178,20 @@ class Delivery:
 
         if self.state == "pickup":
             self.state = "dropoff"
+            self.time_left = self.contract.time_limit
 
             self.feedback(
-                f"Collected: {self.contract.name}."
+                "Parcel loaded. Timer started."
             )
             return
 
-        # A valid drop-off awards points and advances the list.
-        reward = self.contract.reward
+        # Bonus is proportional to unused delivery time.
+        bonus = self.time_bonus
+        reward = self.contract.reward + bonus
 
         self.score += reward
         self.completed_count += 1
+        self.time_left = 0.0
 
         if self.completed_count == len(CONTRACTS):
             self.state = "complete"
@@ -159,7 +205,7 @@ class Delivery:
             self.state = "pickup"
 
             self.feedback(
-                f"+{reward} points. Return to depot."
+                f"+{reward} pts (+{bonus} time). Depot next."
             )
 
     def prompt(self, car):
