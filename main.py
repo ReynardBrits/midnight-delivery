@@ -7,6 +7,7 @@ from camera import Camera, CameraRenderer
 from car import Car
 from delivery import Delivery
 from hud import Hud, HUD_HEIGHT
+from minimap import Minimap
 from records import Records
 from renderer import Renderer
 from screens import Screens
@@ -73,6 +74,7 @@ def main():
         delivery = Delivery()
         traffic = Traffic()
         records = Records()
+        minimap = Minimap(WINDOW_WIDTH)
 
         camera = Camera(
             WINDOW_WIDTH,
@@ -102,7 +104,7 @@ def main():
         print(
             "Enter: start/resume/replay | P: pause"
             " | Space: strong brake | E: interact"
-            " | F: depot repair | M: mute"
+            " | F: depot repair | Tab: map | M: mute"
             " | R: restart night | Escape: exit"
         )
 
@@ -111,6 +113,7 @@ def main():
         caption_timer = 0.0
         running = True
         mode = "title"
+        show_map = True
 
         def restart_night():
             car.reset()
@@ -142,6 +145,13 @@ def main():
                             and pygame.key.get_focused()
                         ):
                             delivery.interact(car)
+
+                    elif event.key == pygame.K_TAB:
+                        if (
+                            mode == "playing"
+                            and pygame.key.get_focused()
+                        ):
+                            show_map = not show_map
 
                     elif event.key == pygame.K_f:
                         if (
@@ -308,6 +318,15 @@ def main():
             )
 
             if mode == "playing":
+                if show_map:
+                    minimap.draw(
+                        renderer,
+                        world,
+                        car,
+                        delivery,
+                        camera,
+                    )
+
                 delivery.draw_guidance(
                     renderer,
                     camera,
@@ -342,6 +361,7 @@ def main():
                         f" | Sound: {audio.status} (M)"
                         f" | Traffic: {traffic.active_count}"
                         " | F: depot repair"
+                        " | Tab: map"
                         " | P: pause | R: restart night | Escape: exit"
                     )
 
