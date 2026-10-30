@@ -4,7 +4,8 @@ import pygame
 from OpenGL import GL
 
 from car import Car
-from renderer3d import Camera3D, Mesh3D, MeshBuilder, Renderer3D
+from renderer3d import Camera3D, Mesh3D, MeshBuilder
+from lighting3d import NightRenderer
 from world import (
     BOLLARDS, CONTAINERS, HORIZONTAL_ROADS, LAMPS,
     ROAD_WIDTH, TREES, VERTICAL_ROADS, WATER_X, World, lettering,
@@ -20,6 +21,72 @@ GLASS = (0.055, 0.13, 0.20, 1.0)
 RUBBER = (0.035, 0.045, 0.06, 1.0)
 METAL = (0.42, 0.50, 0.58, 1.0)
 WARM = (1.0, 0.69, 0.31, 1.0)
+
+
+def make_lights():
+    lights = [
+        (
+            (float(x), float(y), 86.0),
+            (1.0, 0.62, 0.24),
+            300.0,
+            3.6,
+        )
+        for x, y in LAMPS
+    ]
+
+    # Teal light along the front of the depot.
+    lights.extend(
+        (
+            (x, 202.0, 42.0),
+            (0.10, 0.95, 0.78),
+            150.0,
+            2.8,
+        )
+        for x in (140.0, 230.0, 320.0)
+    )
+
+    return lights
+
+
+def make_blockers(world):
+    blockers = []
+
+    for index, building in enumerate(world.buildings):
+        x, y, width, length = building
+
+        _, depth, _ = world.building_style(
+            building, index
+        )
+
+        blockers.append(
+            (x, y, width, length, depth * 2.2 + 4)
+        )
+
+    blockers.extend(
+        (x, y, width, length, 42.0)
+        for x, y, width, length in CONTAINERS
+    )
+
+    for x, y in TREES:
+        blockers.append(
+            (x - 24, y - 24, 48, 48, 3.0)
+        )
+
+        blockers.append(
+            (x - 3, y - 3, 6, 6, 31.0)
+        )
+
+    blockers.extend(
+        (x - 2, y - 2, 4, 4, 88.0)
+        for x, y in LAMPS
+    )
+
+    blockers.extend(
+        (x - 6, y - 6, 12, 12, 14.0)
+        for x, y in BOLLARDS
+    )
+
+    return blockers
 
 
 class DrivingCamera(Camera3D):
@@ -52,10 +119,11 @@ class DrivingCamera(Camera3D):
 
         target = self.REAR_ANGLE - angle + self.look_offset
 
-        # Take the short route across the 0 / 360 degree boundary.
-        difference = (target - self.yaw + 180.0) % 360.0 - 180.0
-        weight = 1.0 - math.exp(-4.0 * dt)
+        difference = (
+            target - self.yaw + 180.0
+        ) % 360.0 - 180.0
 
+        weight = 1.0 - math.exp(-4.0 * dt)
         self.yaw = (self.yaw + difference * weight) % 360.0
 
         radians = math.radians(angle)
@@ -113,7 +181,10 @@ def make_town(world):
     paint = (0.76, 0.79, 0.75, 1.0)
 
     for x in VERTICAL_ROADS:
-        b.plane(x, 0, 0.04, ROAD_WIDTH, world.height, road)
+        b.plane(
+            x, 0, 0.04,
+            ROAD_WIDTH, world.height, road,
+        )
 
         start = 0
 
@@ -138,7 +209,10 @@ def make_town(world):
                 )
 
     for y in HORIZONTAL_ROADS:
-        b.plane(0, y, 0.05, WATER_X - 40, ROAD_WIDTH, road)
+        b.plane(
+            0, y, 0.05,
+            WATER_X - 40, ROAD_WIDTH, road,
+        )
 
         start = 0
 
@@ -164,7 +238,9 @@ def make_town(world):
 
     for x in VERTICAL_ROADS:
         for y in HORIZONTAL_ROADS:
-            for offset in range(14, ROAD_WIDTH - 12, 24):
+            for offset in range(
+                14, ROAD_WIDTH - 12, 24
+            ):
                 b.plane(
                     x - 30, y + offset,
                     0.15, 20, 12, paint,
@@ -188,7 +264,10 @@ def make_town(world):
     for index, building in enumerate(world.buildings):
         x, y, width, length = building
 
-        roof, depth, _ = world.building_style(building, index)
+        roof, depth, _ = world.building_style(
+            building, index
+        )
+
         height = depth * 2.2
 
         wall = (
@@ -216,7 +295,10 @@ def make_town(world):
             1.0,
         )
 
-        b.box(x, y, 0, width, length, height, wall)
+        b.box(
+            x, y, 0,
+            width, length, height, wall,
+        )
 
         b.box(
             x - 2, y - 2, height,
@@ -266,13 +348,22 @@ def make_town(world):
             )
 
             lettering(
-                SignFace(b, y + length + 1.8, height - 10),
-                label, left + 8, 0, TEAL, scale=2,
+                SignFace(
+                    b,
+                    y + length + 1.8,
+                    height - 10,
+                ),
+                label,
+                left + 8,
+                0,
+                TEAL,
+                scale=2,
             )
 
     for x, y, width, length in CONTAINERS:
         b.box(
-            x, y, 0, width, length, 42,
+            x, y, 0,
+            width, length, 42,
             (0.53, 0.37, 0.23, 1.0),
         )
 
@@ -300,15 +391,32 @@ def make_town(world):
         )
 
     for x, y in LAMPS:
-        b.box(x - 6, y - 6, 0, 12, 12, 4, METAL)
-        b.box(x - 1.5, y - 1.5, 4, 3, 3, 84, METAL)
-        b.box(x - 3, y - 3, 88, 6, 6, 3, RUBBER)
-        b.box(x - 2, y - 2, 84, 4, 4, 4, WARM, 1.0)
+        b.box(
+            x - 6, y - 6, 0,
+            12, 12, 4, METAL,
+        )
+
+        b.box(
+            x - 1.5, y - 1.5, 4,
+            3, 3, 84, METAL,
+        )
+
+        b.box(
+            x - 3, y - 3, 88,
+            6, 6, 3, RUBBER,
+        )
+
+        b.box(
+            x - 2, y - 2, 84,
+            4, 4, 4, WARM, 1.0,
+        )
 
     for x, y in BOLLARDS:
-        b.box(x - 6, y - 6, 0, 12, 12, 14, METAL)
+        b.box(
+            x - 6, y - 6, 0,
+            12, 12, 14, METAL,
+        )
 
-    # Outline the existing depot bay.
     x, y, width, length = 120, 206, 200, 60
 
     for edge in (y, y + length - 3):
@@ -326,7 +434,7 @@ def make_town(world):
     return b
 
 
-def make_car():
+def make_car(headlights=True):
     b = MeshBuilder()
 
     b.plane(
@@ -415,8 +523,12 @@ def make_car():
     for x in (-12, 7):
         b.box(
             x, -27.3, 13, 5, 0.6, 3,
-            (1.0, 0.91, 0.67, 1.0),
-            1.0,
+            (
+                (1.0, 0.91, 0.67, 1.0)
+                if headlights
+                else (0.15, 0.18, 0.22, 1.0)
+            ),
+            1.0 if headlights else 0.0,
         )
 
         b.box(
@@ -434,6 +546,7 @@ def main():
     renderer = None
     town_mesh = None
     car_mesh = None
+    car_unlit_mesh = None
 
     try:
         pygame.display.gl_set_attribute(
@@ -491,9 +604,16 @@ def main():
             car.x, car.y, car.angle,
         )
 
-        renderer = Renderer3D(WIDTH, HEIGHT)
+        renderer = NightRenderer(
+            WIDTH,
+            HEIGHT,
+            make_lights(),
+            make_blockers(world),
+        )
+
         town_mesh = Mesh3D(make_town(world))
         car_mesh = Mesh3D(make_car())
+        car_unlit_mesh = Mesh3D(make_car(False))
 
         print(
             "3D preview: WASD / arrows drive; Space brakes."
@@ -505,8 +625,8 @@ def main():
         )
 
         print(
-            "Mouse wheel zooms; P pauses; "
-            "R resets; Escape exits."
+            "Mouse wheel zooms; L switches headlights; "
+            "P pauses; R resets; Escape exits."
         )
 
         print(
@@ -518,6 +638,7 @@ def main():
         accumulator = 0.0
         running = True
         paused = False
+        headlights = True
 
         while running:
             dt = min(
@@ -543,6 +664,12 @@ def main():
                         and event.key == pygame.K_p
                     ):
                         paused = not paused
+
+                    elif (
+                        focused
+                        and event.key == pygame.K_l
+                    ):
+                        headlights = not headlights
 
                     elif (
                         focused
@@ -633,9 +760,18 @@ def main():
                     x, y, angle, dt, orbit
                 )
 
-            renderer.begin(camera)
+            renderer.begin(
+                camera,
+                (x, y, 0.3, angle),
+                headlights,
+            )
+
             renderer.draw(town_mesh)
-            renderer.draw(car_mesh, x, y, 0.3, angle)
+
+            renderer.draw(
+                car_mesh if headlights else car_unlit_mesh,
+                x, y, 0.3, angle,
+            )
 
             pygame.display.flip()
 
@@ -650,11 +786,16 @@ def main():
                 f" | {abs(car.speed):.0f} px/s"
                 f" | Car {math.ceil(car.condition)}%"
                 " | AUTO CAMERA | Q/E look | Wheel zoom"
+                f" | Headlights: {'ON' if headlights else 'OFF'} (L)"
                 " | P pause | R reset | ESC exit"
             )
 
     finally:
-        for mesh in (car_mesh, town_mesh):
+        for mesh in (
+            car_unlit_mesh,
+            car_mesh,
+            town_mesh,
+        ):
             if mesh is not None:
                 mesh.close()
 
