@@ -15,6 +15,16 @@ TEAL = (0.227, 0.839, 0.784, 1.0)
 PARCEL = (0.690, 0.470, 0.280, 1.0)
 PARCEL_TOP = (0.840, 0.650, 0.410, 1.0)
 PARCEL_TAPE = (0.960, 0.850, 0.610, 1.0)
+PARCEL_SIDE = (0.520, 0.320, 0.170, 1.0)
+PARCEL_SCAR = (0.300, 0.180, 0.130, 1.0)
+
+CARGO_WARNING = (1.000, 0.420, 0.400, 1.0)
+
+CARGO_COLOURS = {
+    "STANDARD": TEAL,
+    "EXPRESS": (1.000, 0.745, 0.357, 1.0),
+    "FRAGILE": (0.730, 0.600, 1.000, 1.0),
+}
 
 HEADLIGHT = (1.000, 0.960, 0.760, 1.0)
 TAILLIGHT = (0.550, 0.080, 0.100, 1.0)
@@ -61,15 +71,12 @@ CAR_PARTS = (
     (-15, 8, 2, 4, METAL),
     (13, 8, 2, 4, METAL),
 
-    # Roof rack and strapped parcel.
+    # Empty roof rack. Cargo is drawn separately when loaded.
     (-10, -2, 20, 18, TYRE),
     (-10, -2, 3, 18, METAL),
     (7, -2, 3, 18, METAL),
-    (-7, 0, 14, 13, PARCEL),
-    (-6, 0, 12, 10, PARCEL_TOP),
-    (-1, 0, 2, 13, PARCEL_TAPE),
-    (-7, 5, 14, 2, PARCEL_TAPE),
-    (-8, 12, 16, 2, TEAL),
+    (-7, 2, 14, 2, METAL),
+    (-7, 10, 14, 2, METAL),
 
     # Headlights and rear number plate.
     (-12, -26, 6, 4, HEADLIGHT),
@@ -183,11 +190,13 @@ class Car:
         self.impact_speed = 0.0
 
         self.impact_cooldown = max(
-            0.0, self.impact_cooldown - dt
+            0.0,
+            self.impact_cooldown - dt,
         )
 
         self.impact_flash = max(
-            0.0, self.impact_flash - dt
+            0.0,
+            self.impact_flash - dt,
         )
 
         if self.disabled:
@@ -340,7 +349,8 @@ class Car:
             )
 
             self.condition = max(
-                0.0, self.condition - damage
+                0.0,
+                self.condition - damage,
             )
 
             self.impact_speed = impact
@@ -398,7 +408,10 @@ class Car:
             for building in obstacles
         )
 
-    def draw(self, renderer, alpha):
+    def draw(
+        self, renderer, alpha,
+        cargo_kind=None, cargo_condition=100.0,
+    ):
         x = (
             self.previous_x
             + (self.x - self.previous_x) * alpha
@@ -438,6 +451,15 @@ class Car:
                 angle=angle,
             )
 
+        def draw_quad(points, colour):
+            renderer.draw_quad(tuple(
+                (
+                    x + px * c - py * s,
+                    y + px * s + py * c,
+                )
+                for px, py in points
+            ), colour)
+
         # Offset the shadow in world space.
         renderer.draw_rect(
             x - 16 + 5,
@@ -450,6 +472,14 @@ class Car:
 
         for part in CAR_PARTS:
             draw_part(*part)
+
+        if cargo_kind in CARGO_COLOURS:
+            self.draw_cargo(
+                draw_part,
+                draw_quad,
+                cargo_kind,
+                cargo_condition,
+            )
 
         rear_colour = (
             BRAKE_LIGHT
@@ -466,3 +496,79 @@ class Car:
         if self.speed < -1.0:
             draw_part(-6, 24, 2, 2, REVERSE_LIGHT)
             draw_part(4, 24, 2, 2, REVERSE_LIGHT)
+
+    def draw_cargo(self, part, quad, kind, condition):
+        label = CARGO_COLOURS[kind]
+
+        damaged = (
+            kind == "FRAGILE"
+            and condition < 70.0
+        )
+
+        badly_damaged = (
+            kind == "FRAGILE"
+            and condition <= 35.0
+        )
+
+        top = (
+            tuple(
+                value * 0.78
+                for value in PARCEL_TOP[:3]
+            ) + (1.0,)
+            if badly_damaged
+            else PARCEL_TOP
+        )
+
+        # Raised parcel faces, fitted inside the roof rack.
+        part(-5, 2, 14, 12, CAR_SHADOW)
+
+        quad((
+            (-7, 8),
+            (5, 8),
+            (8, 12),
+            (-4, 12),
+        ), PARCEL)
+
+        quad((
+            (5, -1),
+            (8, 3),
+            (8, 12),
+            (5, 8),
+        ), PARCEL_SIDE)
+
+        part(-7, -1, 12, 9, top)
+        part(-7, -1, 12, 1, PARCEL_TAPE)
+        part(-1, -1, 2, 9, PARCEL_TAPE)
+        part(-7, 4, 12, 2, PARCEL_TAPE)
+
+        # Contract label and matching securing strap.
+        part(-6, 0, 5, 6, label)
+        part(-8, 12, 16, 2, label)
+
+        if kind == "EXPRESS":
+            # Small arrow printed on the label.
+            part(-5, 2, 4, 1, TYRE)
+            part(-3, 1, 1, 1, TYRE)
+            part(-3, 3, 1, 1, TYRE)
+
+        elif kind == "FRAGILE":
+            # Glass symbol: bowl, stem and base.
+            part(-5, 1, 3, 2, TYRE)
+            part(-4, 3, 1, 1, TYRE)
+            part(-5, 4, 3, 1, TYRE)
+
+        else:
+            # Shipping-label lines.
+            part(-5, 1, 3, 1, TYRE)
+            part(-5, 3, 2, 1, TYRE)
+
+        if damaged:
+            part(2, 0, 2, 2, PARCEL_SCAR)
+            part(1, 2, 2, 2, PARCEL_SCAR)
+            part(2, 4, 2, 3, PARCEL_SCAR)
+            part(4, 0, 2, 3, CARGO_WARNING)
+
+        if badly_damaged:
+            part(-6, 6, 3, 2, PARCEL_SCAR)
+            part(-3, 7, 3, 1, PARCEL_SCAR)
+            part(3, 9, 2, 2, CARGO_WARNING)

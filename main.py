@@ -294,7 +294,18 @@ def main():
             delivery.draw_marker(world_renderer)
             traffic.draw(world_renderer, alpha)
 
-            car.draw(world_renderer, alpha)
+            cargo_kind = (
+                delivery.contract.kind
+                if delivery.state == "dropoff"
+                else None
+            )
+
+            car.draw(
+                world_renderer,
+                alpha,
+                cargo_kind=cargo_kind,
+                cargo_condition=delivery.cargo_condition,
+            )
 
             if mode == "playing":
                 delivery.draw_guidance(
