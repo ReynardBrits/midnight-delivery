@@ -7,6 +7,7 @@ from camera import Camera, CameraRenderer
 from car import Car
 from delivery import Delivery
 from hud import Hud, HUD_HEIGHT
+from records import Records
 from renderer import Renderer
 from screens import Screens
 from traffic import Traffic
@@ -71,6 +72,7 @@ def main():
         car = Car(*world.spawn)
         delivery = Delivery()
         traffic = Traffic()
+        records = Records()
 
         camera = Camera(
             WINDOW_WIDTH,
@@ -115,6 +117,7 @@ def main():
             delivery.reset()
             traffic.reset()
             audio.reset_state()
+            records.reset_night()
 
         while running:
             frame_time = min(
@@ -184,6 +187,7 @@ def main():
 
             if mode in ("playing", "paused"):
                 if delivery.state == "complete":
+                    records.record_completed(delivery.score)
                     mode = "complete"
 
                 elif car.disabled:
@@ -311,6 +315,7 @@ def main():
                     delivery,
                     car,
                     audio,
+                    records,
                 )
 
             renderer.end_frame()

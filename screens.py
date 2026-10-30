@@ -267,7 +267,7 @@ class Screens:
             self.surface, TEAL, (860, 230), 7
         )
 
-    def compose(self, mode, delivery, car, audio):
+    def compose(self, mode, delivery, car, audio, records):
         self.surface.fill((8, 14, 26, 235))
 
         if mode == "title":
@@ -348,7 +348,7 @@ class Screens:
             )
 
             self.text(
-                "E: COLLECT / DELIVER    P: PAUSE"
+                "E: COLLECT / DELIVER    F: DEPOT REPAIR    P: PAUSE"
                 "    M: SOUND    ESC: EXIT",
                 (80, 516),
                 "small",
@@ -368,10 +368,20 @@ class Screens:
             )
 
             self.text(
-                "Your score rewards speed and careful driving.",
+                f"BEST NIGHT: {records.best_text}"
+                f"    FINISHED: {records.completed_nights}",
+                (530, 644),
+                "small",
+                AMBER,
+            )
+
+            self.text(
+                records.notice or (
+                    "Finish all nine deliveries to set a record."
+                ),
                 (80, 674),
                 "small",
-                MUTED,
+                CORAL if records.notice else MUTED,
             )
 
             return
@@ -423,6 +433,13 @@ class Screens:
                 (296, 360),
                 "small",
                 MUTED,
+            )
+
+            self.text(
+                f"BEST NIGHT: {records.best_text}",
+                (704, 360),
+                "small",
+                AMBER,
             )
 
             self.button(
@@ -508,6 +525,22 @@ class Screens:
             MUTED,
         )
 
+        self.text(
+            f"BEST NIGHT: {records.best_text}",
+            (296, 421),
+            "small",
+            AMBER,
+        )
+
+        self.text(
+            "NEW BEST!"
+            if won and records.new_best
+            else f"FINISHED: {records.completed_nights}",
+            (720, 421),
+            "small",
+            TEAL if won and records.new_best else MUTED,
+        )
+
         self.button(
             "ENTER  PLAY AGAIN",
             (296, 446, 688, 58),
@@ -521,7 +554,18 @@ class Screens:
             MUTED,
         )
 
-    def draw(self, mode, delivery, car, audio):
+        self.text(
+            records.notice or (
+                "Completed nights are saved automatically."
+                if won
+                else "Finish all nine deliveries to set a record."
+            ),
+            (296, 564),
+            "small",
+            CORAL if records.notice else MUTED,
+        )
+
+    def draw(self, mode, delivery, car, audio, records):
         state = (
             mode,
             delivery.score,
@@ -530,6 +574,10 @@ class Screens:
             delivery.objective,
             math.ceil(car.condition),
             audio.status,
+            records.best_score,
+            records.completed_nights,
+            records.new_best,
+            records.notice,
         )
 
         GL.glActiveTexture(GL.GL_TEXTURE0)
@@ -540,7 +588,9 @@ class Screens:
         )
 
         if state != self.last_state:
-            self.compose(mode, delivery, car, audio)
+            self.compose(
+                mode, delivery, car, audio, records
+            )
 
             pixels = pygame.image.tobytes(
                 self.surface, "RGBA", False
