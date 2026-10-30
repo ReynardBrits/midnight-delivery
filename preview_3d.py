@@ -4,11 +4,12 @@ import pygame
 from OpenGL import GL
 
 from car import Car
+from buildings3d import add_buildings
 from renderer3d import Camera3D, Mesh3D, MeshBuilder
 from lighting3d import NightRenderer
 from world import (
     BOLLARDS, CONTAINERS, HORIZONTAL_ROADS, LAMPS,
-    ROAD_WIDTH, TREES, VERTICAL_ROADS, WATER_X, World, lettering,
+    ROAD_WIDTH, TREES, VERTICAL_ROADS, WATER_X, World,
 )
 
 
@@ -135,27 +136,6 @@ class DrivingCamera(Camera3D):
         )
 
 
-class SignFace:
-    def __init__(self, builder, wall_y, top):
-        self.builder = builder
-        self.wall_y = wall_y
-        self.top = top
-
-    def draw_rect(self, x, y, width, height, colour):
-        z = self.top - y
-
-        self.builder.quad(
-            (
-                (x, self.wall_y, z),
-                (x, self.wall_y, z - height),
-                (x + width, self.wall_y, z - height),
-                (x + width, self.wall_y, z),
-            ),
-            colour,
-            0.8,
-        )
-
-
 def make_town(world):
     b = MeshBuilder()
 
@@ -261,104 +241,7 @@ def make_town(world):
                     0.15, 12, 20, paint,
                 )
 
-    for index, building in enumerate(world.buildings):
-        x, y, width, length = building
-
-        roof, depth, _ = world.building_style(
-            building, index
-        )
-
-        height = depth * 2.2
-
-        wall = (
-            (0.29, 0.40, 0.46, 1.0)
-            if x < 2260
-            else (0.36, 0.37, 0.44, 1.0)
-        )
-
-        b.quad(
-            (
-                (x, y, 0.18),
-                (x + width, y, 0.18),
-                (
-                    x + width + height * 0.5,
-                    y + length + height * 0.4,
-                    0.18,
-                ),
-                (
-                    x + height * 0.5,
-                    y + length + height * 0.4,
-                    0.18,
-                ),
-            ),
-            (0.015, 0.025, 0.045, 0.30),
-            1.0,
-        )
-
-        b.box(
-            x, y, 0,
-            width, length, height, wall,
-        )
-
-        b.box(
-            x - 2, y - 2, height,
-            width + 4, length + 4, 4, roof,
-        )
-
-        b.box(
-            x + 14, y + 14, height + 4,
-            28, 24, 10, METAL,
-        )
-
-        for wx in range(
-            int(x + 18), int(x + width - 18), 38
-        ):
-            b.box(
-                wx, y + length + 0.1,
-                height * 0.48,
-                18, 0.5, 12, WARM, 0.7,
-            )
-
-        for wy in range(
-            int(y + 18), int(y + length - 18), 42
-        ):
-            b.box(
-                x + width + 0.1, wy,
-                height * 0.48,
-                0.5, 18, 12, WARM, 0.7,
-            )
-
-        label = (
-            "DEPOT"
-            if index == 0
-            else "CAFE"
-            if index % 3 == 0
-            else "MARKET"
-        )
-
-        if y < 1600 and x < 2260:
-            sign_width = len(label) * 12 + 14
-            left = x + (width - sign_width) / 2
-
-            b.box(
-                left, y + length + 0.7,
-                height - 27,
-                sign_width, 1, 22,
-                (0.025, 0.08, 0.12, 1.0),
-            )
-
-            lettering(
-                SignFace(
-                    b,
-                    y + length + 1.8,
-                    height - 10,
-                ),
-                label,
-                left + 8,
-                0,
-                TEAL,
-                scale=2,
-            )
+    add_buildings(b, world)
 
     for x, y, width, length in CONTAINERS:
         b.box(
@@ -506,7 +389,10 @@ def make_car(headlights=True):
     b.box(-11, -4, 33, 22, 18, 1.5, RUBBER)
 
     for x in (-11, 9):
-        b.box(x, -4, 34.5, 2, 18, 1.5, METAL)
+        b.box(
+            x, -4, 34.5,
+            2, 18, 1.5, METAL,
+        )
 
     b.box(
         -8, -2, 35, 16, 14, 10,
