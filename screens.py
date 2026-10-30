@@ -267,7 +267,7 @@ class Screens:
             self.surface, TEAL, (860, 230), 7
         )
 
-    def compose(self, mode, delivery, car, audio, records):
+    def compose(self, mode, delivery, car, audio, records, fuel):
         self.surface.fill((8, 14, 26, 235))
 
         if mode == "title":
@@ -343,14 +343,22 @@ class Screens:
                 )
 
             self.text(
-                "WASD / ARROWS: DRIVE    SPACE: BRAKE",
+                "WASD / ARROWS: DRIVE    SPACE: BRAKE    TAB: MAP",
                 (80, 480),
             )
 
             self.text(
-                "E: COLLECT / DELIVER    F: DEPOT REPAIR    P: PAUSE"
+                "E: COLLECT / DELIVER    F: REPAIR    G: REFUEL    P: PAUSE"
                 "    M: SOUND    ESC: EXIT",
                 (80, 516),
+                "small",
+                MUTED,
+            )
+
+            self.text(
+                "Depot fuel: up to 40 units / 60 pts. "
+                "Repairs and fuel reduce your score.",
+                (80, 548),
                 "small",
                 MUTED,
             )
@@ -428,8 +436,8 @@ class Screens:
             )
 
             self.text(
-                "VEHICLE CONDITION: "
-                f"{math.ceil(car.condition)}%",
+                f"CAR: {math.ceil(car.condition)}%"
+                f"    FUEL: {fuel.percentage}%",
                 (296, 360),
                 "small",
                 MUTED,
@@ -466,17 +474,15 @@ class Screens:
         won = mode == "complete"
         colour = TEAL if won else CORAL
 
-        title = (
-            "NIGHT COMPLETE"
-            if won
-            else "VEHICLE DISABLED"
-        )
-
-        reason = (
-            "Three shifts completed."
-            if won
-            else "Your vehicle could not continue."
-        )
+        if won:
+            title = "NIGHT COMPLETE"
+            reason = "Three shifts completed."
+        elif car.disabled:
+            title = "VEHICLE DISABLED"
+            reason = "Your vehicle could not continue."
+        else:
+            title = "OUT OF FUEL"
+            reason = "Refuel at the depot before the tank runs dry."
 
         self.text(
             title,
@@ -518,9 +524,16 @@ class Screens:
         )
 
         self.text(
-            "VEHICLE CONDITION: "
-            f"{math.ceil(car.condition)}%",
+            f"CAR: {math.ceil(car.condition)}%"
+            f"    FUEL: {fuel.percentage}%",
             (296, 397),
+            "small",
+            MUTED,
+        )
+
+        self.text(
+            f"FUEL SPENT: {fuel.points_spent} PTS",
+            (720, 397),
             "small",
             MUTED,
         )
@@ -565,7 +578,7 @@ class Screens:
             CORAL if records.notice else MUTED,
         )
 
-    def draw(self, mode, delivery, car, audio, records):
+    def draw(self, mode, delivery, car, audio, records, fuel):
         state = (
             mode,
             delivery.score,
@@ -578,6 +591,9 @@ class Screens:
             records.completed_nights,
             records.new_best,
             records.notice,
+            fuel.percentage,
+            fuel.empty,
+            fuel.points_spent,
         )
 
         GL.glActiveTexture(GL.GL_TEXTURE0)
@@ -589,7 +605,7 @@ class Screens:
 
         if state != self.last_state:
             self.compose(
-                mode, delivery, car, audio, records
+                mode, delivery, car, audio, records, fuel
             )
 
             pixels = pygame.image.tobytes(

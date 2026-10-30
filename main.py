@@ -6,6 +6,7 @@ from audio import Audio
 from camera import Camera, CameraRenderer
 from car import Car
 from delivery import Delivery
+from fuel import Fuel
 from hud import Hud, HUD_HEIGHT
 from minimap import Minimap
 from records import Records
@@ -21,6 +22,42 @@ TARGET_FPS = 60
 
 PHYSICS_STEP = 1.0 / 120.0
 MAX_UPDATES = 12
+
+
+def refuel_at_depot(car, delivery, fuel, audio):
+    if delivery.state == "complete":
+        return
+
+    if car.disabled or fuel.empty:
+        delivery.feedback("Cannot continue. R restarts night.")
+        return
+
+    if not delivery.at_depot(car):
+        delivery.feedback("Fuel available at the depot.")
+        return
+
+    if abs(car.speed) > delivery.STOP_SPEED:
+        delivery.feedback("Stop first: hold SPACE.")
+        return
+
+    _, cost = fuel.refill_quote()
+
+    if cost == 0:
+        delivery.feedback("Fuel tank already full.")
+        return
+
+    if delivery.score < cost:
+        delivery.feedback(f"Need {cost} pts for fuel.")
+        return
+
+    paid = fuel.refuel(delivery.score)
+    delivery.score -= paid
+
+    delivery.feedback(
+        f"Fuel {fuel.percentage}%. -{paid} pts."
+    )
+
+    audio.play_effect("pickup")
 
 
 def main():
@@ -72,6 +109,7 @@ def main():
         world = World()
         car = Car(*world.spawn)
         delivery = Delivery()
+        fuel = Fuel()
         traffic = Traffic()
         records = Records()
         minimap = Minimap(WINDOW_WIDTH)
@@ -104,7 +142,8 @@ def main():
         print(
             "Enter: start/resume/replay | P: pause"
             " | Space: strong brake | E: interact"
-            " | F: depot repair | Tab: map | M: mute"
+            " | F: depot repair | G: depot fuel"
+            " | Tab: map | M: mute"
             " | R: restart night | Escape: exit"
         )
 
@@ -118,6 +157,7 @@ def main():
         def restart_night():
             car.reset()
             delivery.reset()
+            fuel.reset()
             traffic.reset()
             audio.reset_state()
             records.reset_night()
@@ -160,6 +200,15 @@ def main():
                         ):
                             delivery.repair(car)
 
+                    elif event.key == pygame.K_g:
+                        if (
+                            mode == "playing"
+                            and pygame.key.get_focused()
+                        ):
+                            refuel_at_depot(
+                                car, delivery, fuel, audio
+                            )
+
                     elif event.key == pygame.K_r:
                         restart_night()
                         accumulator = 0.0
@@ -200,7 +249,8 @@ def main():
                     records.record_completed(delivery.score)
                     mode = "complete"
 
-                elif car.disabled:
+                elif car.disabled or fuel.empty:
+                    car.speed = 0.0
                     mode = "game_over"
 
                 elif mode == "playing" and not focused:
@@ -259,10 +309,26 @@ def main():
                         car,
                     )
 
+                    was_low = fuel.low
+
+                    fuel.update(
+                        PHYSICS_STEP,
+                        car.speed,
+                        car.MAX_SPEED,
+                    )
+
+                    if fuel.low and not was_low:
+                        delivery.feedback(
+                            "Fuel low. G refuels at depot."
+                        )
+
+                        audio.play_effect("warning")
+
                     accumulator -= PHYSICS_STEP
                     updates += 1
 
-                    if car.disabled:
+                    if car.disabled or fuel.empty:
+                        car.speed = 0.0
                         mode = "game_over"
                         break
 
@@ -335,7 +401,7 @@ def main():
 
                 # Draw the shape batch before the textured HUD.
                 renderer.flush()
-                hud.draw(car, audio, delivery)
+                hud.draw(car, audio, delivery, fuel)
 
             else:
                 renderer.flush()
@@ -346,6 +412,7 @@ def main():
                     car,
                     audio,
                     records,
+                    fuel,
                 )
 
             renderer.end_frame()
@@ -360,7 +427,8 @@ def main():
                         f" | Speed: {abs(car.speed):.0f} px/s"
                         f" | Sound: {audio.status} (M)"
                         f" | Traffic: {traffic.active_count}"
-                        " | F: depot repair"
+                        f" | Fuel: {fuel.percentage}%"
+                        " | F: repair | G: refuel"
                         " | Tab: map"
                         " | P: pause | R: restart night | Escape: exit"
                     )

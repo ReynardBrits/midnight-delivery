@@ -60,6 +60,10 @@ def compose_dashboard(
         score,
         condition,
         impact_flash,
+        fuel_percent,
+        fuel_low,
+        fuel_spent,
+        fuel_hint,
     ) = state
 
     width = surface.get_width()
@@ -75,6 +79,10 @@ def compose_dashboard(
 
     pygame.draw.line(
         surface, DIVIDER, (650, 18), (650, 88)
+    )
+
+    pygame.draw.line(
+        surface, DIVIDER, (1016, 18), (1016, 88)
     )
 
     def text(
@@ -153,20 +161,52 @@ def compose_dashboard(
         )
 
     text(
-        "E   INTERACT    R   RESTART",
+        "E INTERACT   F REPAIR   G FUEL",
         (682, 16),
     )
 
     text(
-        f"SCORE: {score}    SOUND: {sound_status.upper()}",
+        f"SCORE: {score}   FUEL SPENT: {fuel_spent}",
         (682, 46),
     )
 
     text(
-        "WASD / ARROWS   SPACE BRAKE   M SOUND   ESC EXIT",
+        "TAB MAP   P PAUSE   M SOUND: "
+        + sound_status.upper(),
         (682, 76),
         "small",
         MUTED,
+    )
+
+    if fuel_low:
+        fuel_colour = CORAL
+    elif fuel_percent <= 40:
+        fuel_colour = AMBER
+    else:
+        fuel_colour = TEAL
+
+    text(
+        f"FUEL: {fuel_percent}%",
+        (1040, 16),
+        colour=fuel_colour,
+    )
+
+    pygame.draw.rect(
+        surface, DIVIDER, (1040, 49, 192, 8)
+    )
+
+    if fuel_percent > 0:
+        pygame.draw.rect(
+            surface,
+            fuel_colour,
+            (1040, 49, round(192 * fuel_percent / 100), 8),
+        )
+
+    text(
+        fuel_hint,
+        (1040, 76),
+        "small",
+        fuel_colour if fuel_low else MUTED,
     )
 
 
@@ -305,7 +345,7 @@ class Hud:
 
         GL.glUseProgram(0)
 
-    def draw(self, car, audio, delivery):
+    def draw(self, car, audio, delivery, fuel):
         if car.disabled:
             direction = "DISABLED"
         elif car.braking:
@@ -324,6 +364,27 @@ class Hud:
             objective = delivery.objective
             prompt = delivery.prompt(car)
 
+        if fuel.empty:
+            fuel_hint = "TANK EMPTY"
+
+        elif delivery.at_depot(car):
+            _, cost = fuel.refill_quote()
+
+            if abs(car.speed) > delivery.STOP_SPEED:
+                fuel_hint = "STOP TO REFUEL"
+            elif cost == 0:
+                fuel_hint = "TANK FULL"
+            elif delivery.score < cost:
+                fuel_hint = f"NEED {cost} PTS"
+            else:
+                fuel_hint = f"G: REFUEL {cost} PTS"
+
+        elif fuel.low:
+            fuel_hint = "LOW: RETURN TO DEPOT"
+
+        else:
+            fuel_hint = "G: REFUEL AT DEPOT"
+
         state = (
             round(abs(car.speed)),
             direction,
@@ -333,6 +394,10 @@ class Hud:
             delivery.score,
             math.ceil(car.condition),
             car.impact_flash > 0.0,
+            fuel.percentage,
+            fuel.low,
+            fuel.points_spent,
+            fuel_hint,
         )
 
         now = pygame.time.get_ticks()
