@@ -100,6 +100,7 @@ class Delivery:
     STOP_SPEED = 10.0
     MAX_TIME_BONUS = 50
     FRAGILE_DAMAGE_MULTIPLIER = 2.0
+    REPAIR_AMOUNT = 25.0
 
     def __init__(self):
         self.reset()
@@ -319,6 +320,78 @@ class Delivery:
             and y <= car.y <= y + height
         )
 
+    def at_depot(self, car):
+        x, y, width, height = PICKUP_ZONE
+
+        return (
+            x <= car.x <= x + width
+            and y <= car.y <= y + height
+        )
+
+    def repair_quote(self, car) -> tuple[float, int]:
+        missing = max(0.0, 100.0 - car.condition)
+
+        if missing < 0.000001:
+            return 0.0, 0
+
+        amount = min(self.REPAIR_AMOUNT, missing)
+
+        # One score point per condition restored, rounded up.
+        return amount, math.ceil(amount)
+
+    def repair(self, car):
+        if self.state == "complete":
+            return
+
+        if car.disabled:
+            self.feedback(
+                "Vehicle disabled. R restarts night."
+            )
+            return
+
+        if not self.at_depot(car):
+            self.feedback(
+                "Repairs available at the depot."
+            )
+            return
+
+        if abs(car.speed) > self.STOP_SPEED:
+            self.feedback(
+                "Stop first: hold SPACE."
+            )
+            return
+
+        amount, cost = self.repair_quote(car)
+
+        if cost == 0:
+            self.feedback(
+                "Car already fully repaired."
+            )
+            return
+
+        if self.score < cost:
+            self.feedback(
+                f"Need {cost} pts for repairs."
+            )
+            return
+
+        self.score -= cost
+        car.condition = min(
+            100.0,
+            car.condition + amount,
+        )
+
+        car.impact_flash = 0.0
+
+        # Start damage tracking from the repaired condition.
+        # Cargo condition is deliberately unchanged.
+        self.previous_car_condition = car.condition
+
+        self.feedback(
+            f"Car repaired to {math.ceil(car.condition)}%. "
+            f"-{cost} pts."
+        )
+
     def feedback(self, message):
         self.message = message
         self.message_time = 2.0
@@ -447,6 +520,22 @@ class Delivery:
                 f"{self.total_deliveries} deliveries done. R to replay."
             )
 
+        if self.at_depot(car):
+            _, cost = self.repair_quote(car)
+
+            if cost > 0:
+                if abs(car.speed) > self.STOP_SPEED:
+                    return "Stop first: F repairs at depot."
+
+                if self.state == "pickup":
+                    action = "E: LOAD"
+                elif self.state == "handover":
+                    action = "E: NEXT SHIFT"
+                else:
+                    action = "PARCEL LOADED"
+
+                return f"{action} | F: REPAIR {cost}pts"
+
         if self.contains(car):
             if abs(car.speed) > self.STOP_SPEED:
                 return "Stop first: hold SPACE."
@@ -546,7 +635,9 @@ class Delivery:
             else "DEPOT"
         )
 
-        self.draw_bay_name(renderer, name, zone, colour)
+        self.draw_bay_name(
+            renderer, name, zone, colour
+        )
 
         # Parcel symbol in the active bay.
         cx = x + width / 2
@@ -556,7 +647,9 @@ class Delivery:
         r(cx - 1, cy - 9, 2, 18, WHITE)
         r(cx - 10, cy - 1, 20, 2, WHITE)
 
-    def draw_bay_name(self, renderer, name, zone, tint):
+    def draw_bay_name(
+        self, renderer, name, zone, tint
+    ):
         x, y, width, _ = zone
         text_width = len(name) * 6 - 1
 

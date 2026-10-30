@@ -99,7 +99,8 @@ def main():
 
         print(
             "Enter: start/resume/replay | P: pause"
-            " | Space: strong brake | E: interact | M: mute"
+            " | Space: strong brake | E: interact"
+            " | F: depot repair | M: mute"
             " | R: restart night | Escape: exit"
         )
 
@@ -138,6 +139,13 @@ def main():
                             and pygame.key.get_focused()
                         ):
                             delivery.interact(car)
+
+                    elif event.key == pygame.K_f:
+                        if (
+                            mode == "playing"
+                            and pygame.key.get_focused()
+                        ):
+                            delivery.repair(car)
 
                     elif event.key == pygame.K_r:
                         restart_night()
@@ -317,6 +325,7 @@ def main():
                         f" | Speed: {abs(car.speed):.0f} px/s"
                         f" | Sound: {audio.status} (M)"
                         f" | Traffic: {traffic.active_count}"
+                        " | F: depot repair"
                         " | P: pause | R: restart night | Escape: exit"
                     )
 
