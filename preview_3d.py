@@ -4,12 +4,11 @@ import pygame
 from OpenGL import GL
 
 from car import Car
-from buildings3d import add_buildings
+from scenery3d import make_town
 from renderer3d import Camera3D, Mesh3D, MeshBuilder
 from lighting3d import NightRenderer
 from world import (
-    BOLLARDS, CONTAINERS, HORIZONTAL_ROADS, LAMPS,
-    ROAD_WIDTH, TREES, VERTICAL_ROADS, WATER_X, World,
+    BOLLARDS, CONTAINERS, LAMPS, TREES, World,
 )
 
 
@@ -21,7 +20,6 @@ TEAL = (0.12, 0.76, 0.70, 1.0)
 GLASS = (0.055, 0.13, 0.20, 1.0)
 RUBBER = (0.035, 0.045, 0.06, 1.0)
 METAL = (0.42, 0.50, 0.58, 1.0)
-WARM = (1.0, 0.69, 0.31, 1.0)
 
 
 def make_lights():
@@ -136,187 +134,6 @@ class DrivingCamera(Camera3D):
         )
 
 
-def make_town(world):
-    b = MeshBuilder()
-
-    b.plane(
-        -1500, -1500, -1,
-        world.width + 3000, world.height + 3000,
-        (0.045, 0.08, 0.10, 1.0),
-    )
-
-    b.plane(
-        0, 0, 0, world.width, world.height,
-        (0.10, 0.19, 0.17, 1.0),
-    )
-
-    b.plane(
-        WATER_X, 0, 0.03,
-        world.width - WATER_X, world.height,
-        (0.025, 0.12, 0.20, 1.0),
-    )
-
-    road = (0.16, 0.20, 0.27, 1.0)
-    pavement = (0.32, 0.38, 0.44, 1.0)
-    paint = (0.76, 0.79, 0.75, 1.0)
-
-    for x in VERTICAL_ROADS:
-        b.plane(
-            x, 0, 0.04,
-            ROAD_WIDTH, world.height, road,
-        )
-
-        start = 0
-
-        for y in (*HORIZONTAL_ROADS, world.height):
-            if y > start:
-                for edge in (x - 16, x + ROAD_WIDTH):
-                    b.box(
-                        edge, start, 0,
-                        16, y - start, 2.0, pavement,
-                    )
-
-            start = y + ROAD_WIDTH
-
-        for y in range(0, world.height, 50):
-            if not any(
-                h - 35 <= y <= h + ROAD_WIDTH + 35
-                for h in HORIZONTAL_ROADS
-            ):
-                b.plane(
-                    x + ROAD_WIDTH / 2 - 2,
-                    y, 0.1, 4, 24, paint,
-                )
-
-    for y in HORIZONTAL_ROADS:
-        b.plane(
-            0, y, 0.05,
-            WATER_X - 40, ROAD_WIDTH, road,
-        )
-
-        start = 0
-
-        for x in (*VERTICAL_ROADS, WATER_X - 40):
-            if x > start:
-                for edge in (y - 16, y + ROAD_WIDTH):
-                    b.box(
-                        start, edge, 0,
-                        x - start, 16, 2.0, pavement,
-                    )
-
-            start = x + ROAD_WIDTH
-
-        for x in range(0, WATER_X - 40, 50):
-            if not any(
-                v - 35 <= x <= v + ROAD_WIDTH + 35
-                for v in VERTICAL_ROADS
-            ):
-                b.plane(
-                    x, y + ROAD_WIDTH / 2 - 2,
-                    0.12, 24, 4, paint,
-                )
-
-    for x in VERTICAL_ROADS:
-        for y in HORIZONTAL_ROADS:
-            for offset in range(
-                14, ROAD_WIDTH - 12, 24
-            ):
-                b.plane(
-                    x - 30, y + offset,
-                    0.15, 20, 12, paint,
-                )
-
-                b.plane(
-                    x + ROAD_WIDTH + 10, y + offset,
-                    0.15, 20, 12, paint,
-                )
-
-                b.plane(
-                    x + offset, y - 30,
-                    0.15, 12, 20, paint,
-                )
-
-                b.plane(
-                    x + offset, y + ROAD_WIDTH + 10,
-                    0.15, 12, 20, paint,
-                )
-
-    add_buildings(b, world)
-
-    for x, y, width, length in CONTAINERS:
-        b.box(
-            x, y, 0,
-            width, length, 42,
-            (0.53, 0.37, 0.23, 1.0),
-        )
-
-    for x, y in TREES:
-        b.box(
-            x - 24, y - 24, 0,
-            48, 48, 3,
-            (0.17, 0.23, 0.22, 1.0),
-        )
-
-        b.box(
-            x - 3, y - 3, 3,
-            6, 6, 28,
-            (0.28, 0.19, 0.11, 1.0),
-        )
-
-        b.cone(
-            x, y, 22, 25, 35,
-            (0.15, 0.38, 0.27, 1.0),
-        )
-
-        b.cone(
-            x, y, 40, 19, 30,
-            (0.20, 0.46, 0.32, 1.0),
-        )
-
-    for x, y in LAMPS:
-        b.box(
-            x - 6, y - 6, 0,
-            12, 12, 4, METAL,
-        )
-
-        b.box(
-            x - 1.5, y - 1.5, 4,
-            3, 3, 84, METAL,
-        )
-
-        b.box(
-            x - 3, y - 3, 88,
-            6, 6, 3, RUBBER,
-        )
-
-        b.box(
-            x - 2, y - 2, 84,
-            4, 4, 4, WARM, 1.0,
-        )
-
-    for x, y in BOLLARDS:
-        b.box(
-            x - 6, y - 6, 0,
-            12, 12, 14, METAL,
-        )
-
-    x, y, width, length = 120, 206, 200, 60
-
-    for edge in (y, y + length - 3):
-        b.plane(
-            x, edge, 0.22,
-            width, 3, TEAL, 0.5,
-        )
-
-    for edge in (x, x + width - 3):
-        b.plane(
-            edge, y, 0.22,
-            3, length, TEAL, 0.5,
-        )
-
-    return b
-
-
 def make_car(headlights=True):
     b = MeshBuilder()
 
@@ -348,16 +165,20 @@ def make_car(headlights=True):
 
     b.quad(
         (
-            (-12, -9.7, 20), (12, -9.7, 20),
-            (10, -5.0, 31), (-10, -5.0, 31),
+            (-12, -9.7, 20),
+            (12, -9.7, 20),
+            (10, -5.0, 31),
+            (-10, -5.0, 31),
         ),
         GLASS,
     )
 
     b.quad(
         (
-            (12, 18.7, 20), (-12, 18.7, 20),
-            (-10, 14.0, 31), (10, 14.0, 31),
+            (12, 18.7, 20),
+            (-12, 18.7, 20),
+            (-10, 14.0, 31),
+            (10, 14.0, 31),
         ),
         GLASS,
     )
@@ -408,7 +229,8 @@ def make_car(headlights=True):
 
     for x in (-12, 7):
         b.box(
-            x, -27.3, 13, 5, 0.6, 3,
+            x, -27.3, 13,
+            5, 0.6, 3,
             (
                 (1.0, 0.91, 0.67, 1.0)
                 if headlights
@@ -418,7 +240,8 @@ def make_car(headlights=True):
         )
 
         b.box(
-            x, 26.7, 13, 5, 0.6, 3,
+            x, 26.7, 13,
+            5, 0.6, 3,
             (0.95, 0.12, 0.07, 1.0),
             0.8,
         )
