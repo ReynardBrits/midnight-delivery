@@ -4,6 +4,7 @@ import pygame
 from OpenGL import GL
 
 from car import Car
+from visibility3d import CarVisibility
 from scenery3d import make_town
 from renderer3d import Camera3D, Mesh3D, MeshBuilder
 from lighting3d import NightRenderer
@@ -134,14 +135,16 @@ class DrivingCamera(Camera3D):
         )
 
 
-def make_car(headlights=True):
+def make_car(headlights=True, shadow=True):
     b = MeshBuilder()
 
-    b.plane(
-        -24, -29, 0.2, 48, 62,
-        (0.01, 0.015, 0.025, 0.40),
-        1.0,
-    )
+    if shadow:
+        b.plane(
+            -24, -29, 0.2,
+            48, 62,
+            (0.01, 0.015, 0.025, 0.40),
+            1.0,
+        )
 
     for x in (-20, 14):
         for y in (-16, 17):
@@ -151,7 +154,8 @@ def make_car(headlights=True):
             b.wheel(hub_x, y, 8, 4, 0.3, METAL)
 
     b.loft(
-        -16, -27, 9, 32, 54, 10,
+        -16, -27, 9,
+        32, 54, 10,
         1, 1, AMBER,
     )
 
@@ -159,7 +163,8 @@ def make_car(headlights=True):
     b.box(-16, 25, 9, 32, 2, 4, RUBBER)
 
     b.loft(
-        -14, -10, 19, 28, 29, 14,
+        -14, -10, 19,
+        28, 29, 14,
         3, 6, AMBER,
     )
 
@@ -216,12 +221,14 @@ def make_car(headlights=True):
         )
 
     b.box(
-        -8, -2, 35, 16, 14, 10,
+        -8, -2, 35,
+        16, 14, 10,
         (0.72, 0.47, 0.25, 1.0),
     )
 
     b.box(
-        -1, -2, 45, 2, 14, 0.3,
+        -1, -2, 45,
+        2, 14, 0.3,
         (0.96, 0.82, 0.57, 1.0),
     )
 
@@ -249,38 +256,44 @@ def make_car(headlights=True):
     return b
 
 
-def main():
-    pygame.display.init()
+def create_window():
+    pygame.display.gl_set_attribute(
+        pygame.GL_CONTEXT_MAJOR_VERSION, 3
+    )
 
-    renderer = None
-    town_mesh = None
-    car_mesh = None
-    car_unlit_mesh = None
+    pygame.display.gl_set_attribute(
+        pygame.GL_CONTEXT_MINOR_VERSION, 3
+    )
 
-    try:
+    pygame.display.gl_set_attribute(
+        pygame.GL_CONTEXT_PROFILE_MASK,
+        pygame.GL_CONTEXT_PROFILE_CORE,
+    )
+
+    pygame.display.gl_set_attribute(
+        pygame.GL_DEPTH_SIZE, 24
+    )
+
+    # Prefer smooth edges and an 8-bit stencil buffer.
+    # The last format provides a compatibility fallback.
+    for samples, stencil in (
+        (4, 8),
+        (0, 8),
+        (0, 0),
+    ):
         pygame.display.gl_set_attribute(
-            pygame.GL_CONTEXT_MAJOR_VERSION, 3
+            pygame.GL_MULTISAMPLEBUFFERS,
+            int(samples > 0),
         )
 
         pygame.display.gl_set_attribute(
-            pygame.GL_CONTEXT_MINOR_VERSION, 3
+            pygame.GL_MULTISAMPLESAMPLES,
+            samples,
         )
 
         pygame.display.gl_set_attribute(
-            pygame.GL_CONTEXT_PROFILE_MASK,
-            pygame.GL_CONTEXT_PROFILE_CORE,
-        )
-
-        pygame.display.gl_set_attribute(
-            pygame.GL_DEPTH_SIZE, 24
-        )
-
-        pygame.display.gl_set_attribute(
-            pygame.GL_MULTISAMPLEBUFFERS, 1
-        )
-
-        pygame.display.gl_set_attribute(
-            pygame.GL_MULTISAMPLESAMPLES, 4
+            pygame.GL_STENCIL_SIZE,
+            stencil,
         )
 
         try:
@@ -289,19 +302,27 @@ def main():
                 pygame.OPENGL | pygame.DOUBLEBUF,
             )
 
+            return stencil > 0
+
         except pygame.error:
-            pygame.display.gl_set_attribute(
-                pygame.GL_MULTISAMPLEBUFFERS, 0
-            )
+            if samples == 0 and stencil == 0:
+                raise
 
-            pygame.display.gl_set_attribute(
-                pygame.GL_MULTISAMPLESAMPLES, 0
-            )
+    return False
 
-            pygame.display.set_mode(
-                (WIDTH, HEIGHT),
-                pygame.OPENGL | pygame.DOUBLEBUF,
-            )
+
+def main():
+    pygame.display.init()
+
+    renderer = None
+    visibility = None
+    silhouette_mesh = None
+    town_mesh = None
+    car_mesh = None
+    car_unlit_mesh = None
+
+    try:
+        stencil_available = create_window()
 
         GL.glEnable(GL.GL_MULTISAMPLE)
 
@@ -324,6 +345,14 @@ def main():
         car_mesh = Mesh3D(make_car())
         car_unlit_mesh = Mesh3D(make_car(False))
 
+        silhouette_mesh = Mesh3D(
+            make_car(shadow=False)
+        )
+
+        visibility = CarVisibility(
+            stencil_available
+        )
+
         print(
             "3D preview: WASD / arrows drive; Space brakes."
         )
@@ -342,6 +371,11 @@ def main():
             "This preview tests the graphics and driving. "
             "Run main.py for the campaign."
         )
+
+        if not stencil_available:
+            print(
+                "Car silhouette unavailable with this display format."
+            )
 
         clock = pygame.time.Clock()
         accumulator = 0.0
@@ -477,6 +511,13 @@ def main():
 
             renderer.draw(town_mesh)
 
+            visibility.draw(
+                camera,
+                silhouette_mesh,
+                renderer.program,
+                x, y, 0.3, angle,
+            )
+
             renderer.draw(
                 car_mesh if headlights else car_unlit_mesh,
                 x, y, 0.3, angle,
@@ -500,7 +541,11 @@ def main():
             )
 
     finally:
+        if visibility is not None:
+            visibility.close()
+
         for mesh in (
+            silhouette_mesh,
             car_unlit_mesh,
             car_mesh,
             town_mesh,
