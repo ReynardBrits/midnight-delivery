@@ -7,7 +7,7 @@ from OpenGL.GL.shaders import compileProgram, compileShader
 
 
 HUD_HEIGHT = 104
-SPEED_TO_KMH = 0.036
+SPEED_TO_KMH = 0.3
 
 WHITE = (235, 242, 247)
 MUTED = (156, 176, 194)
