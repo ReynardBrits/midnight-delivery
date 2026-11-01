@@ -1,0 +1,416 @@
+"""Playable 3D delivery campaign. Run with Python 3.12."""
+
+from pathlib import Path
+
+import pygame
+from OpenGL import GL
+
+from audio import Audio
+from car import Car
+from delivery import Delivery
+from fuel import Fuel
+from hud import Hud
+from interface3d import DeliveryMarkers, Navigation, Screens3D
+from lighting3d import NightRenderer
+from preview_3d import (
+    WIDTH, HEIGHT, STEP, DrivingCamera, create_window,
+    make_car, make_lights, make_blockers,
+)
+from records import Records
+from renderer import Renderer
+from renderer3d import Mesh3D
+from scenery3d import make_town
+from visibility3d import CarVisibility
+from world import World
+
+
+def refuel(car, delivery, fuel, audio):
+    if delivery.state == "complete":
+        return
+
+    if car.disabled or fuel.empty:
+        delivery.feedback("Cannot continue. R restarts night.")
+
+    elif not delivery.at_depot(car):
+        delivery.feedback("Refuel at the depot.")
+
+    elif abs(car.speed) > delivery.STOP_SPEED:
+        delivery.feedback("Stop before refuelling.")
+
+    else:
+        _, cost = fuel.refill_quote()
+
+        if cost == 0:
+            delivery.feedback("Tank already full.")
+
+        elif delivery.score < cost:
+            delivery.feedback(f"Need {cost} points for fuel.")
+
+        else:
+            paid = fuel.refuel(delivery.score)
+            delivery.score -= paid
+
+            delivery.feedback(
+                f"Fuel {fuel.percentage}%. -{paid} pts."
+            )
+
+            audio.play_effect("pickup")
+
+
+def main():
+    pygame.display.init()
+    resources = []
+
+    try:
+        stencil = create_window()
+        GL.glEnable(GL.GL_MULTISAMPLE)
+
+        def keep(value):
+            resources.append(value)
+            return value
+
+        world = World()
+        car = Car(*world.spawn)
+        delivery, fuel = Delivery(), Fuel()
+
+        records = Records(
+            Path(__file__).resolve().parent
+            / "save_data"
+            / "records_3d.json"
+        )
+
+        camera = DrivingCamera(
+            WIDTH, HEIGHT,
+            car.x, car.y, car.angle,
+        )
+
+        scene = keep(
+            NightRenderer(
+                WIDTH, HEIGHT,
+                make_lights(),
+                make_blockers(world),
+            )
+        )
+
+        town = keep(Mesh3D(make_town(world)))
+        car_on = keep(Mesh3D(make_car()))
+        car_off = keep(Mesh3D(make_car(False)))
+
+        silhouette = keep(
+            Mesh3D(make_car(shadow=False))
+        )
+
+        visibility = keep(CarVisibility(stencil))
+        markers = keep(DeliveryMarkers())
+        overlay = keep(Renderer(WIDTH, HEIGHT))
+        hud = keep(Hud(WIDTH, HEIGHT))
+        screens = keep(Screens3D(WIDTH, HEIGHT))
+        audio = keep(Audio())
+        navigation = Navigation(WIDTH, HEIGHT)
+
+        mode = "title"
+        running = True
+        show_map = True
+        headlights = True
+        accumulator = 0.0
+        clock = pygame.time.Clock()
+
+        audio.update(
+            car, delivery, mode, focused=False
+        )
+
+        def restart():
+            nonlocal mode, accumulator
+
+            car.reset()
+            delivery.reset()
+            fuel.reset()
+            audio.reset_state()
+            records.reset_night()
+
+            camera.reset_follow(
+                car.x, car.y, car.angle
+            )
+
+            hud.last_state = None
+            accumulator = 0.0
+            mode = "playing"
+
+        def settle():
+            nonlocal mode
+
+            if mode not in ("playing", "paused"):
+                return
+
+            if delivery.state == "complete":
+                records.record_completed(delivery.score)
+                car.speed = 0.0
+                mode = "complete"
+
+            elif car.disabled or fuel.empty:
+                car.speed = 0.0
+                mode = "game_over"
+
+        print(
+            "3D campaign: ENTER starts. "
+            "E loads/delivers at the active bay."
+        )
+
+        print(
+            "WASD/arrows drive | Space brake | "
+            "Z/C look | Wheel zoom"
+        )
+
+        print(
+            "F repair | G refuel | TAB map | L lights | "
+            "M mute | P pause | R restart | ESC exit"
+        )
+
+        while running:
+            dt = min(
+                clock.tick(60) / 1000.0,
+                0.1,
+            )
+
+            focused = pygame.key.get_focused()
+
+            if mode == "playing" and not focused:
+                mode = "paused"
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+
+                elif event.type == pygame.KEYDOWN:
+                    key = event.key
+
+                    if key == pygame.K_ESCAPE:
+                        running = False
+
+                    elif focused:
+                        if key == pygame.K_m:
+                            audio.toggle_mute()
+
+                        elif key == pygame.K_l:
+                            headlights = not headlights
+
+                        elif key == pygame.K_r:
+                            restart()
+
+                        elif key in (
+                            pygame.K_RETURN,
+                            pygame.K_KP_ENTER,
+                        ):
+                            if mode == "paused":
+                                mode = "playing"
+
+                            elif mode in (
+                                "title",
+                                "complete",
+                                "game_over",
+                            ):
+                                restart()
+
+                        elif (
+                            key == pygame.K_p
+                            and mode in ("playing", "paused")
+                        ):
+                            mode = (
+                                "paused"
+                                if mode == "playing"
+                                else "playing"
+                            )
+
+                        elif mode == "playing":
+                            if key == pygame.K_e:
+                                delivery.interact(car)
+
+                            elif key == pygame.K_f:
+                                delivery.repair(car)
+
+                            elif key == pygame.K_g:
+                                refuel(
+                                    car, delivery, fuel, audio
+                                )
+
+                            elif key == pygame.K_TAB:
+                                show_map = not show_map
+
+                        settle()
+
+                elif (
+                    event.type == pygame.MOUSEWHEEL
+                    and focused
+                ):
+                    camera.zoom(event.y)
+
+            if not running:
+                break
+
+            orbit = 0
+
+            if mode == "playing" and focused:
+                keys = pygame.key.get_pressed()
+
+                throttle = int(
+                    keys[pygame.K_w]
+                    or keys[pygame.K_UP]
+                ) - int(
+                    keys[pygame.K_s]
+                    or keys[pygame.K_DOWN]
+                )
+
+                steering = int(
+                    keys[pygame.K_d]
+                    or keys[pygame.K_RIGHT]
+                ) - int(
+                    keys[pygame.K_a]
+                    or keys[pygame.K_LEFT]
+                )
+
+                orbit = (
+                    int(keys[pygame.K_c])
+                    - int(keys[pygame.K_z])
+                )
+
+                accumulator += dt
+
+                while (
+                    accumulator >= STEP
+                    and mode == "playing"
+                ):
+                    car.update(
+                        STEP,
+                        throttle,
+                        steering,
+                        bool(keys[pygame.K_SPACE]),
+                        world.width,
+                        world.height,
+                        world.obstacles,
+                    )
+
+                    delivery.update(STEP, car)
+
+                    was_low = fuel.low
+
+                    fuel.update(
+                        STEP, car.speed, car.MAX_SPEED
+                    )
+
+                    if fuel.low and not was_low:
+                        delivery.feedback(
+                            "Fuel low. G refuels at depot."
+                        )
+
+                        audio.play_effect("warning")
+
+                    accumulator -= STEP
+                    settle()
+
+            if mode != "playing":
+                accumulator = 0.0
+                car.sync_render_state()
+
+            audio.update(
+                car, delivery, mode, focused
+            )
+
+            alpha = accumulator / STEP
+
+            x = (
+                car.previous_x
+                + (car.x - car.previous_x) * alpha
+            )
+
+            y = (
+                car.previous_y
+                + (car.y - car.previous_y) * alpha
+            )
+
+            turn = (
+                car.angle - car.previous_angle + 180
+            ) % 360 - 180
+
+            angle = (
+                car.previous_angle + turn * alpha
+            )
+
+            if mode == "playing":
+                camera.follow_car(
+                    x, y, angle, dt, orbit
+                )
+
+            scene.begin(
+                camera,
+                (x, y, 0.3, angle),
+                headlights,
+            )
+
+            scene.draw(town)
+
+            GL.glDepthMask(GL.GL_FALSE)
+
+            try:
+                markers.draw(scene, delivery)
+
+            finally:
+                GL.glDepthMask(GL.GL_TRUE)
+
+            visibility.draw(
+                camera,
+                silhouette,
+                scene.program,
+                x, y, 0.3, angle,
+            )
+
+            scene.draw(
+                car_on if headlights else car_off,
+                x, y, 0.3, angle,
+            )
+
+            # Screen elements must ignore the 3D scene's depth.
+            GL.glDisable(GL.GL_DEPTH_TEST)
+
+            if mode == "playing":
+                navigation.draw(
+                    overlay,
+                    world,
+                    car,
+                    delivery,
+                    camera,
+                    show_map,
+                )
+
+                overlay.flush()
+
+                hud.draw(
+                    car, audio, delivery, fuel
+                )
+
+            else:
+                screens.draw(
+                    mode,
+                    delivery,
+                    car,
+                    audio,
+                    records,
+                    fuel,
+                )
+
+            pygame.display.flip()
+
+            pygame.display.set_caption(
+                f"Midnight Delivery 3D | {mode.upper()}"
+                " | E interact | Z/C look | L lights"
+                " | P pause | R restart"
+            )
+
+    finally:
+        for resource in reversed(resources):
+            resource.close()
+
+        pygame.quit()
+
+
+if __name__ == "__main__":
+    main()
