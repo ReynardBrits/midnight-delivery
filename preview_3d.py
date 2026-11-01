@@ -3,7 +3,9 @@ import math
 import pygame
 from OpenGL import GL
 
+from audio import Audio
 from car import Car
+from delivery import Delivery
 from visibility3d import CarVisibility
 from scenery3d import make_town
 from renderer3d import Camera3D, Mesh3D, MeshBuilder
@@ -315,6 +317,7 @@ def main():
     pygame.display.init()
 
     renderer = None
+    audio = None
     visibility = None
     silhouette_mesh = None
     town_mesh = None
@@ -328,6 +331,10 @@ def main():
 
         world = World()
         car = Car(*world.spawn)
+
+        # The sound system reads delivery state. This preview leaves
+        # jobs waiting at the depot until gameplay is connected.
+        delivery = Delivery()
 
         camera = DrivingCamera(
             WIDTH, HEIGHT,
@@ -353,6 +360,14 @@ def main():
             stencil_available
         )
 
+        audio = Audio()
+
+        audio.update(
+            car, delivery,
+            "paused",
+            focused=False,
+        )
+
         print(
             "3D preview: WASD / arrows drive; Space brakes."
         )
@@ -364,7 +379,7 @@ def main():
 
         print(
             "Mouse wheel zooms; L switches headlights; "
-            "P pauses; R resets; Escape exits."
+            "M mutes; P pauses; R resets; Escape exits."
         )
 
         print(
@@ -404,6 +419,12 @@ def main():
 
                     elif (
                         focused
+                        and event.key == pygame.K_m
+                    ):
+                        audio.toggle_mute()
+
+                    elif (
+                        focused
                         and event.key == pygame.K_p
                     ):
                         paused = not paused
@@ -419,6 +440,7 @@ def main():
                         and event.key == pygame.K_r
                     ):
                         car.reset()
+                        audio.reset_state()
 
                         camera.reset_follow(
                             car.x, car.y, car.angle
@@ -480,6 +502,18 @@ def main():
                 accumulator = 0.0
                 car.sync_render_state()
 
+            audio_mode = (
+                "paused"
+                if paused
+                else "game_over"
+                if car.disabled
+                else "playing"
+            )
+
+            audio.update(
+                car, delivery, audio_mode, focused
+            )
+
             alpha = accumulator / STEP
 
             x = (
@@ -528,6 +562,8 @@ def main():
             status = (
                 "PAUSED - P resumes"
                 if paused
+                else "CAR DISABLED - R resets"
+                if car.disabled
                 else "DRIVING"
             )
 
@@ -535,12 +571,15 @@ def main():
                 f"Midnight Delivery | 3D PREVIEW | {status}"
                 f" | {abs(car.speed):.0f} px/s"
                 f" | Car {math.ceil(car.condition)}%"
-                " | AUTO CAMERA | Q/E look | Wheel zoom"
-                f" | Headlights: {'ON' if headlights else 'OFF'} (L)"
+                f" | Sound: {audio.status} (M)"
+                f" | Lights: {'ON' if headlights else 'OFF'} (L)"
                 " | P pause | R reset | ESC exit"
             )
 
     finally:
+        if audio is not None:
+            audio.close()
+
         if visibility is not None:
             visibility.close()
 
