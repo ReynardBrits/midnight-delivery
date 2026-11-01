@@ -1,4 +1,4 @@
-"""Playable 3D delivery campaign. Run with Python 3.12."""
+"""Playable 3D campaign with traffic, dynamic parcels and vehicle lights."""
 
 from pathlib import Path
 
@@ -13,13 +13,17 @@ from hud import Hud
 from interface3d import DeliveryMarkers, Navigation, Screens3D
 from lighting3d import NightRenderer
 from preview_3d import (
-    WIDTH, HEIGHT, STEP, DrivingCamera, create_window,
-    make_car, make_lights, make_blockers,
+    WIDTH, HEIGHT, STEP, DrivingCamera,
+    create_window, make_lights, make_blockers,
 )
 from records import Records
 from renderer import Renderer
 from renderer3d import Mesh3D
 from scenery3d import make_town
+from vehicles3d import (
+    Traffic3D, VehicleModels,
+    cargo_key, interpolated_pose,
+)
 from visibility3d import CarVisibility
 from world import World
 
@@ -30,22 +34,17 @@ def refuel(car, delivery, fuel, audio):
 
     if car.disabled or fuel.empty:
         delivery.feedback("Cannot continue. R restarts night.")
-
     elif not delivery.at_depot(car):
         delivery.feedback("Refuel at the depot.")
-
     elif abs(car.speed) > delivery.STOP_SPEED:
         delivery.feedback("Stop before refuelling.")
-
     else:
         _, cost = fuel.refill_quote()
 
         if cost == 0:
             delivery.feedback("Tank already full.")
-
         elif delivery.score < cost:
             delivery.feedback(f"Need {cost} points for fuel.")
-
         else:
             paid = fuel.refuel(delivery.score)
             delivery.score -= paid
@@ -71,7 +70,9 @@ def main():
 
         world = World()
         car = Car(*world.spawn)
-        delivery, fuel = Delivery(), Fuel()
+        delivery = Delivery()
+        fuel = Fuel()
+        traffic = Traffic3D()
 
         records = Records(
             Path(__file__).resolve().parent
@@ -84,28 +85,24 @@ def main():
             car.x, car.y, car.angle,
         )
 
+        static_blockers = tuple(make_blockers(world))
+
         scene = keep(
             NightRenderer(
                 WIDTH, HEIGHT,
-                make_lights(),
-                make_blockers(world),
+                make_lights(), static_blockers,
             )
         )
 
         town = keep(Mesh3D(make_town(world)))
-        car_on = keep(Mesh3D(make_car()))
-        car_off = keep(Mesh3D(make_car(False)))
-
-        silhouette = keep(
-            Mesh3D(make_car(shadow=False))
-        )
-
+        models = keep(VehicleModels())
         visibility = keep(CarVisibility(stencil))
         markers = keep(DeliveryMarkers())
         overlay = keep(Renderer(WIDTH, HEIGHT))
         hud = keep(Hud(WIDTH, HEIGHT))
         screens = keep(Screens3D(WIDTH, HEIGHT))
         audio = keep(Audio())
+
         navigation = Navigation(WIDTH, HEIGHT)
 
         mode = "title"
@@ -125,6 +122,7 @@ def main():
             car.reset()
             delivery.reset()
             fuel.reset()
+            traffic.reset()
             audio.reset_state()
             records.reset_night()
 
@@ -152,18 +150,16 @@ def main():
                 mode = "game_over"
 
         print(
-            "3D campaign: ENTER starts. "
-            "E loads/delivers at the active bay."
+            "ENTER starts | WASD/arrows drive | Space brake"
         )
 
         print(
-            "WASD/arrows drive | Space brake | "
-            "Z/C look | Wheel zoom"
+            "E deliver | F repair | G refuel | TAB map"
         )
 
         print(
-            "F repair | G refuel | TAB map | L lights | "
-            "M mute | P pause | R restart | ESC exit"
+            "Z/C look | Wheel zoom | L lights | M mute"
+            " | P pause | R restart | ESC exit"
         )
 
         while running:
@@ -247,6 +243,10 @@ def main():
             if not running:
                 break
 
+            traffic.set_shift(
+                delivery.shift_number, car
+            )
+
             orbit = 0
 
             if mode == "playing" and focused:
@@ -279,6 +279,8 @@ def main():
                     accumulator >= STEP
                     and mode == "playing"
                 ):
+                    traffic.update(STEP, car)
+
                     car.update(
                         STEP,
                         throttle,
@@ -286,7 +288,7 @@ def main():
                         bool(keys[pygame.K_SPACE]),
                         world.width,
                         world.height,
-                        world.obstacles,
+                        world.obstacles + traffic.obstacles,
                     )
 
                     delivery.update(STEP, car)
@@ -310,40 +312,44 @@ def main():
             if mode != "playing":
                 accumulator = 0.0
                 car.sync_render_state()
+                traffic.sync_render_state()
 
             audio.update(
                 car, delivery, mode, focused
             )
 
             alpha = accumulator / STEP
-
-            x = (
-                car.previous_x
-                + (car.x - car.previous_x) * alpha
-            )
-
-            y = (
-                car.previous_y
-                + (car.y - car.previous_y) * alpha
-            )
-
-            turn = (
-                car.angle - car.previous_angle + 180
-            ) % 360 - 180
-
-            angle = (
-                car.previous_angle + turn * alpha
-            )
+            pose = interpolated_pose(car, alpha)
+            x, y, z, angle = pose
 
             if mode == "playing":
                 camera.follow_car(
                     x, y, angle, dt, orbit
                 )
 
+            traffic_poses = [
+                interpolated_pose(vehicle, alpha)
+                for vehicle in traffic.active_vehicles
+            ]
+
+            # Moving cars also obstruct the player's headlights.
+            scene.blockers = static_blockers + tuple(
+                (
+                    *vehicle.bounds_at(
+                        vehicle_pose[0],
+                        vehicle_pose[1],
+                        vehicle_pose[3],
+                    ),
+                    34.0,
+                )
+                for vehicle, vehicle_pose in zip(
+                    traffic.active_vehicles,
+                    traffic_poses,
+                )
+            )
+
             scene.begin(
-                camera,
-                (x, y, 0.3, angle),
-                headlights,
+                camera, pose, headlights
             )
 
             scene.draw(town)
@@ -352,23 +358,24 @@ def main():
 
             try:
                 markers.draw(scene, delivery)
-
             finally:
                 GL.glDepthMask(GL.GL_TRUE)
 
+            models.draw_traffic(
+                scene, traffic, traffic_poses
+            )
+
             visibility.draw(
                 camera,
-                silhouette,
+                models.silhouettes[cargo_key(delivery)],
                 scene.program,
-                x, y, 0.3, angle,
+                *pose,
             )
 
-            scene.draw(
-                car_on if headlights else car_off,
-                x, y, 0.3, angle,
+            models.draw_player(
+                scene, car, delivery, pose, headlights
             )
 
-            # Screen elements must ignore the 3D scene's depth.
             GL.glDisable(GL.GL_DEPTH_TEST)
 
             if mode == "playing":
@@ -382,25 +389,19 @@ def main():
                 )
 
                 overlay.flush()
-
-                hud.draw(
-                    car, audio, delivery, fuel
-                )
+                hud.draw(car, audio, delivery, fuel)
 
             else:
                 screens.draw(
-                    mode,
-                    delivery,
-                    car,
-                    audio,
-                    records,
-                    fuel,
+                    mode, delivery, car,
+                    audio, records, fuel,
                 )
 
             pygame.display.flip()
 
             pygame.display.set_caption(
                 f"Midnight Delivery 3D | {mode.upper()}"
+                f" | Traffic {traffic.active_count}"
                 " | E interact | Z/C look | L lights"
                 " | P pause | R restart"
             )
