@@ -1,4 +1,4 @@
-"""Playable 3D campaign with traffic, dynamic parcels and vehicle lights."""
+"""3D delivery campaign with traffic, effects and saved preferences."""
 
 from pathlib import Path
 
@@ -8,10 +8,12 @@ from OpenGL import GL
 from audio import Audio
 from car import Car
 from delivery import Delivery
+from effects3d import Effects
 from fuel import Fuel
 from hud import Hud
 from interface3d import DeliveryMarkers, Navigation, Screens3D
 from lighting3d import NightRenderer
+from preferences3d import Preferences
 from preview_3d import (
     WIDTH, HEIGHT, STEP, DrivingCamera,
     create_window, make_lights, make_blockers,
@@ -59,6 +61,8 @@ def refuel(car, delivery, fuel, audio):
 def main():
     pygame.display.init()
     resources = []
+    preferences = audio = camera = None
+    headlights = show_map = True
 
     try:
         stencil = create_window()
@@ -73,11 +77,11 @@ def main():
         delivery = Delivery()
         fuel = Fuel()
         traffic = Traffic3D()
+        preferences = Preferences()
 
         records = Records(
             Path(__file__).resolve().parent
-            / "save_data"
-            / "records_3d.json"
+            / "save_data" / "records_3d.json"
         )
 
         camera = DrivingCamera(
@@ -96,19 +100,24 @@ def main():
 
         town = keep(Mesh3D(make_town(world)))
         models = keep(VehicleModels())
+        effects = keep(Effects(car, delivery))
         visibility = keep(CarVisibility(stencil))
         markers = keep(DeliveryMarkers())
         overlay = keep(Renderer(WIDTH, HEIGHT))
         hud = keep(Hud(WIDTH, HEIGHT))
         screens = keep(Screens3D(WIDTH, HEIGHT))
         audio = keep(Audio())
-
         navigation = Navigation(WIDTH, HEIGHT)
 
         mode = "title"
         running = True
-        show_map = True
-        headlights = True
+        show_map = preferences.show_map
+        headlights = preferences.headlights
+        camera.span = preferences.zoom
+
+        if preferences.muted:
+            audio.toggle_mute()
+
         accumulator = 0.0
         clock = pygame.time.Clock()
 
@@ -123,6 +132,7 @@ def main():
             delivery.reset()
             fuel.reset()
             traffic.reset()
+            effects.reset(car, delivery)
             audio.reset_state()
             records.reset_night()
 
@@ -149,25 +159,15 @@ def main():
                 car.speed = 0.0
                 mode = "game_over"
 
-        print(
-            "ENTER starts | WASD/arrows drive | Space brake"
-        )
-
-        print(
-            "E deliver | F repair | G refuel | TAB map"
-        )
-
+        print("ENTER starts | WASD/arrows drive | Space brake")
+        print("E deliver | F repair | G refuel | TAB map")
         print(
             "Z/C look | Wheel zoom | L lights | M mute"
             " | P pause | R restart | ESC exit"
         )
 
         while running:
-            dt = min(
-                clock.tick(60) / 1000.0,
-                0.1,
-            )
-
+            dt = min(clock.tick(60) / 1000.0, 0.1)
             focused = pygame.key.get_focused()
 
             if mode == "playing" and not focused:
@@ -199,11 +199,8 @@ def main():
                         ):
                             if mode == "paused":
                                 mode = "playing"
-
                             elif mode in (
-                                "title",
-                                "complete",
-                                "game_over",
+                                "title", "complete", "game_over"
                             ):
                                 restart()
 
@@ -220,15 +217,10 @@ def main():
                         elif mode == "playing":
                             if key == pygame.K_e:
                                 delivery.interact(car)
-
                             elif key == pygame.K_f:
                                 delivery.repair(car)
-
                             elif key == pygame.K_g:
-                                refuel(
-                                    car, delivery, fuel, audio
-                                )
-
+                                refuel(car, delivery, fuel, audio)
                             elif key == pygame.K_TAB:
                                 show_map = not show_map
 
@@ -282,17 +274,13 @@ def main():
                     traffic.update(STEP, car)
 
                     car.update(
-                        STEP,
-                        throttle,
-                        steering,
+                        STEP, throttle, steering,
                         bool(keys[pygame.K_SPACE]),
-                        world.width,
-                        world.height,
+                        world.width, world.height,
                         world.obstacles + traffic.obstacles,
                     )
 
                     delivery.update(STEP, car)
-
                     was_low = fuel.low
 
                     fuel.update(
@@ -303,7 +291,6 @@ def main():
                         delivery.feedback(
                             "Fuel low. G refuels at depot."
                         )
-
                         audio.play_effect("warning")
 
                     accumulator -= STEP
@@ -313,6 +300,14 @@ def main():
                 accumulator = 0.0
                 car.sync_render_state()
                 traffic.sync_render_state()
+
+            effects.observe(car, delivery)
+
+            if (
+                mode in ("playing", "complete", "game_over")
+                and focused
+            ):
+                effects.update(dt)
 
             audio.update(
                 car, delivery, mode, focused
@@ -332,7 +327,6 @@ def main():
                 for vehicle in traffic.active_vehicles
             ]
 
-            # Moving cars also obstruct the player's headlights.
             scene.blockers = static_blockers + tuple(
                 (
                     *vehicle.bounds_at(
@@ -355,7 +349,6 @@ def main():
             scene.draw(town)
 
             GL.glDepthMask(GL.GL_FALSE)
-
             try:
                 markers.draw(scene, delivery)
             finally:
@@ -376,16 +369,14 @@ def main():
                 scene, car, delivery, pose, headlights
             )
 
+            effects.draw(scene, camera, delivery)
+
             GL.glDisable(GL.GL_DEPTH_TEST)
 
             if mode == "playing":
                 navigation.draw(
-                    overlay,
-                    world,
-                    car,
-                    delivery,
-                    camera,
-                    show_map,
+                    overlay, world, car,
+                    delivery, camera, show_map,
                 )
 
                 overlay.flush()
@@ -407,6 +398,18 @@ def main():
             )
 
     finally:
+        if (
+            preferences is not None
+            and audio is not None
+            and camera is not None
+        ):
+            preferences.save(
+                audio.muted,
+                headlights,
+                show_map,
+                camera.span,
+            )
+
         for resource in reversed(resources):
             resource.close()
 
