@@ -6,6 +6,7 @@ from OpenGL import GL
 from audio import Audio
 from car import Car
 from delivery import Delivery
+from hud import SPEED_TO_KMH
 from visibility3d import CarVisibility
 from scenery3d import make_town
 from renderer3d import Camera3D, Mesh3D, MeshBuilder
@@ -569,7 +570,7 @@ def main():
 
             pygame.display.set_caption(
                 f"Midnight Delivery | 3D PREVIEW | {status}"
-                f" | {abs(car.speed):.0f} px/s"
+                f" | {abs(car.speed) * SPEED_TO_KMH:.0f} km/h"
                 f" | Car {math.ceil(car.condition)}%"
                 f" | Sound: {audio.status} (M)"
                 f" | Lights: {'ON' if headlights else 'OFF'} (L)"

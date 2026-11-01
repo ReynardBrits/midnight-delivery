@@ -1,4 +1,4 @@
-"""3D delivery campaign with traffic, effects and saved preferences."""
+"""3D delivery campaign with help, screenshots and saved preferences."""
 
 from pathlib import Path
 
@@ -7,11 +7,12 @@ from OpenGL import GL
 
 from audio import Audio
 from car import Car
+from controls3d import GameScreens, save_capture
 from delivery import Delivery
 from effects3d import Effects
 from fuel import Fuel
 from hud import Hud
-from interface3d import DeliveryMarkers, Navigation, Screens3D
+from interface3d import DeliveryMarkers, Navigation
 from lighting3d import NightRenderer
 from preferences3d import Preferences
 from preview_3d import (
@@ -105,12 +106,15 @@ def main():
         markers = keep(DeliveryMarkers())
         overlay = keep(Renderer(WIDTH, HEIGHT))
         hud = keep(Hud(WIDTH, HEIGHT))
-        screens = keep(Screens3D(WIDTH, HEIGHT))
+        screens = keep(GameScreens(WIDTH, HEIGHT))
         audio = keep(Audio())
         navigation = Navigation(WIDTH, HEIGHT)
 
         mode = "title"
+        help_open = False
+        help_return = "title"
         running = True
+
         show_map = preferences.show_map
         headlights = preferences.headlights
         camera.span = preferences.zoom
@@ -126,8 +130,9 @@ def main():
         )
 
         def restart():
-            nonlocal mode, accumulator
+            nonlocal mode, accumulator, help_open
 
+            help_open = False
             car.reset()
             delivery.reset()
             fuel.reset()
@@ -143,6 +148,17 @@ def main():
             hud.last_state = None
             accumulator = 0.0
             mode = "playing"
+
+        def close_help(resume=False):
+            nonlocal mode, help_open
+
+            help_open = False
+
+            mode = (
+                "playing"
+                if resume and help_return in ("playing", "paused")
+                else help_return
+            )
 
         def settle():
             nonlocal mode
@@ -163,6 +179,7 @@ def main():
         print("E deliver | F repair | G refuel | TAB map")
         print(
             "Z/C look | Wheel zoom | L lights | M mute"
+            " | F1 help | F12 screenshot"
             " | P pause | R restart | ESC exit"
         )
 
@@ -173,6 +190,8 @@ def main():
             if mode == "playing" and not focused:
                 mode = "paused"
 
+            capture_requested = False
+
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
@@ -181,14 +200,43 @@ def main():
                     key = event.key
 
                     if key == pygame.K_ESCAPE:
-                        running = False
+                        if help_open:
+                            if focused:
+                                close_help()
+                        else:
+                            running = False
 
                     elif focused:
-                        if key == pygame.K_m:
+                        if key == pygame.K_F12:
+                            capture_requested = True
+
+                        elif (
+                            key == pygame.K_F1
+                            and mode in ("title", "playing", "paused")
+                        ):
+                            if help_open:
+                                close_help()
+                            else:
+                                help_return = mode
+
+                                if mode == "playing":
+                                    mode = "paused"
+
+                                help_open = True
+
+                        elif key == pygame.K_m:
                             audio.toggle_mute()
 
                         elif key == pygame.K_l:
                             headlights = not headlights
+
+                        elif help_open:
+                            if key in (
+                                pygame.K_p,
+                                pygame.K_RETURN,
+                                pygame.K_KP_ENTER,
+                            ):
+                                close_help(resume=True)
 
                         elif key == pygame.K_r:
                             restart()
@@ -310,7 +358,10 @@ def main():
                 effects.update(dt)
 
             audio.update(
-                car, delivery, mode, focused
+                car,
+                delivery,
+                "paused" if help_open else mode,
+                focused,
             )
 
             alpha = accumulator / STEP
@@ -370,10 +421,9 @@ def main():
             )
 
             effects.draw(scene, camera, delivery)
-
             GL.glDisable(GL.GL_DEPTH_TEST)
 
-            if mode == "playing":
+            if mode == "playing" and not help_open:
                 navigation.draw(
                     overlay, world, car,
                     delivery, camera, show_map,
@@ -384,14 +434,19 @@ def main():
 
             else:
                 screens.draw(
-                    mode, delivery, car,
+                    "help" if help_open else mode,
+                    delivery, car,
                     audio, records, fuel,
                 )
+
+            if capture_requested:
+                save_capture(WIDTH, HEIGHT)
 
             pygame.display.flip()
 
             pygame.display.set_caption(
                 f"Midnight Delivery 3D | {mode.upper()}"
+                " | F1 help | F12 screenshot"
                 f" | Traffic {traffic.active_count}"
                 " | E interact | Z/C look | L lights"
                 " | P pause | R restart"
@@ -418,3 +473,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    

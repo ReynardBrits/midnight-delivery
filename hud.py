@@ -7,6 +7,7 @@ from OpenGL.GL.shaders import compileProgram, compileShader
 
 
 HUD_HEIGHT = 104
+SPEED_TO_KMH = 0.036
 
 WHITE = (235, 242, 247)
 MUTED = (156, 176, 194)
@@ -104,7 +105,7 @@ def compose_dashboard(
 
     text("SPEED", (384, 12), "small", MUTED)
     text(f"{speed:03d}", (384, 34), "speed")
-    text("px/s", (462, 51), "small", MUTED)
+    text("km/h", (462, 51), "small", MUTED)
 
     if direction == "DISABLED":
         direction_colour = CORAL
@@ -386,7 +387,7 @@ class Hud:
             fuel_hint = "G: REFUEL AT DEPOT"
 
         state = (
-            round(abs(car.speed)),
+            round(abs(car.speed) * SPEED_TO_KMH),
             direction,
             audio.status,
             objective,
@@ -417,7 +418,7 @@ class Hud:
                 self.surface,
                 self.fonts,
                 state,
-                car.MAX_SPEED,
+                car.MAX_SPEED * SPEED_TO_KMH,
             )
 
             pixels = pygame.image.tobytes(
