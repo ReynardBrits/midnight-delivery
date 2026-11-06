@@ -19,7 +19,7 @@ class Preferences:
         self.muted = False
         self.headlights = True
         self.show_map = True
-        self.zoom = 880.0
+        self.zoom = 760.0
 
         try:
             data = json.loads(

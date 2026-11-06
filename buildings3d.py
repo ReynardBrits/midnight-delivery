@@ -1,6 +1,6 @@
-"""Original low-poly buildings, assembled once into the town's static mesh."""
+"""Original low-poly buildings assembled into the town's static mesh."""
 
-from world import lettering
+from world import EDUVOS_BUILDING, lettering
 
 
 DARK = (0.055, 0.09, 0.13, 1.0)
@@ -12,7 +12,7 @@ TEAL = (0.12, 0.76, 0.70, 1.0)
 
 
 class Facade:
-    """Place details in local coordinates on any of a building's four walls."""
+    """Place details on any of a building's four walls."""
 
     def __init__(self, builder, origin, along, width):
         self.builder = builder
@@ -28,7 +28,10 @@ class Facade:
             z,
         )
 
-    def rect(self, u, z, width, height, colour, emission=0.0, offset=0.25):
+    def rect(
+        self, u, z, width, height,
+        colour, emission=0.0, offset=0.25,
+    ):
         self.builder.quad(
             (
                 self.point(u, z, offset),
@@ -40,26 +43,47 @@ class Facade:
             emission,
         )
 
-    def slab(self, u, z, width, height, depth, colour, offset=0.3):
+    def slab(
+        self, u, z, width, height,
+        depth, colour, offset=0.3,
+    ):
         a = self.point(u, z, offset)
         c = self.point(u + width, z, offset + depth)
 
         self.builder.box(
-            min(a[0], c[0]), min(a[1], c[1]), z,
-            abs(c[0] - a[0]), abs(c[1] - a[1]), height, colour,
+            min(a[0], c[0]),
+            min(a[1], c[1]),
+            z,
+            abs(c[0] - a[0]),
+            abs(c[1] - a[1]),
+            height,
+            colour,
         )
 
     def draw_rect(self, x, y, width, height, colour):
-        # Adapter for the project's original 5-by-7 pixel lettering.
-        self.rect(x, -y - height, width, height, colour, 0.85, 1.1)
+        # Adapter for the original pixel lettering.
+        self.rect(
+            x, -y - height,
+            width, height,
+            colour, 0.85, 1.1,
+        )
 
     def sign(self, label, z, colour=TEAL, scale=2):
         width = (len(label) * 6 - 1) * scale + 12
         left = (self.width - width) / 2
         height = 7 * scale + 8
 
-        self.rect(left, z, width, height, DARK, offset=0.6)
-        self.rect(left, z, width, 1.5, colour, 0.7, 0.8)
+        self.rect(
+            left, z,
+            width, height,
+            DARK, offset=0.6,
+        )
+
+        self.rect(
+            left, z,
+            width, 1.5,
+            colour, 0.7, 0.8,
+        )
 
         lettering(
             self,
@@ -73,10 +97,30 @@ class Facade:
 
 def faces(builder, x, y, width, length):
     return (
-        Facade(builder, (x, y + length), (1, 0), width),  # South
-        Facade(builder, (x + width, y), (-1, 0), width),  # North
-        Facade(builder, (x + width, y + length), (0, -1), length),
-        Facade(builder, (x, y), (0, 1), length),
+        Facade(
+            builder,
+            (x, y + length),
+            (1, 0),
+            width,
+        ),
+        Facade(
+            builder,
+            (x + width, y),
+            (-1, 0),
+            width,
+        ),
+        Facade(
+            builder,
+            (x + width, y + length),
+            (0, -1),
+            length,
+        ),
+        Facade(
+            builder,
+            (x, y),
+            (0, 1),
+            length,
+        ),
     )
 
 
@@ -114,7 +158,10 @@ def window(face, u, z, width=22, height=18, lit=True):
     )
 
 
-def door(face, u, z=2, width=22, height=35, colour=TEAL):
+def door(
+    face, u, z=2,
+    width=22, height=35, colour=TEAL,
+):
     face.slab(
         u - 2, z,
         width + 4, height + 2,
@@ -134,7 +181,8 @@ def door(face, u, z=2, width=22, height=35, colour=TEAL):
     )
 
     face.rect(
-        u + width - 5, z + height * 0.4,
+        u + width - 5,
+        z + height * 0.4,
         2, 4,
         CREAM, offset=1.3,
     )
@@ -196,14 +244,18 @@ def flat_roof(builder, x, y, width, length, height):
 
     for line in range(4):
         builder.plane(
-            x + 17, y + 17 + line * 5,
+            x + 17,
+            y + 17 + line * 5,
             height + 4.1,
             22, 1.2,
             DARK,
         )
 
 
-def pitched_roof(builder, x, y, width, length, eave, ridge, colour):
+def pitched_roof(
+    builder, x, y, width, length,
+    eave, ridge, colour,
+):
     left, right = x - 3, x + width + 3
     north, south = y - 3, y + length + 3
     middle = x + width / 2
@@ -222,7 +274,11 @@ def pitched_roof(builder, x, y, width, length, eave, ridge, colour):
             colour,
         )
 
-        for seam_y in range(int(north) + 12, int(south), 16):
+        for seam_y in range(
+            int(north) + 12,
+            int(south),
+            16,
+        ):
             builder.quad(
                 (
                     (a, seam_y, za + 0.15),
@@ -233,7 +289,6 @@ def pitched_roof(builder, x, y, width, length, eave, ridge, colour):
                 DARK,
             )
 
-    # Gables close the roof, so there are no hollow triangular ends.
     gable = (0.37, 0.44, 0.46, 1.0)
 
     builder.triangle(
@@ -290,7 +345,10 @@ def depot(builder, sides, x, y, width, length, height):
         (0.22, 0.39, 0.42, 1.0),
     )
 
-    flat_roof(builder, x, y, width, length, height)
+    flat_roof(
+        builder, x, y,
+        width, length, height,
+    )
 
     front = sides[0]
 
@@ -303,7 +361,11 @@ def depot(builder, sides, x, y, width, length, height):
             GLASS, 0.08, 1.4,
         )
 
-    door(front, width - 42, height=35)
+    door(
+        front,
+        width - 42,
+        height=35,
+    )
 
     front.rect(
         0, 46,
@@ -315,7 +377,9 @@ def depot(builder, sides, x, y, width, length, height):
     sides[1].sign("MIDNIGHT", 52)
 
     for side in sides[1:]:
-        for u in range(14, int(side.width) - 28, 42):
+        for u in range(
+            14, int(side.width) - 28, 42
+        ):
             window(side, u, 18, 26, 22)
 
     builder.plane(
@@ -325,7 +389,10 @@ def depot(builder, sides, x, y, width, length, height):
     )
 
 
-def shop(builder, sides, x, y, width, length, height, index):
+def shop(
+    builder, sides, x, y,
+    width, length, height, index,
+):
     accents = (
         TEAL,
         (0.90, 0.42, 0.22, 1.0),
@@ -347,17 +414,34 @@ def shop(builder, sides, x, y, width, length, height, index):
         walls[index % 3],
     )
 
-    flat_roof(builder, x, y, width, length, height)
+    flat_roof(
+        builder, x, y,
+        width, length, height,
+    )
 
-    label = ("CAFE", "MARKET", "ARCADE", "BAKERY")[index % 4]
+    label = (
+        "CAFE", "MARKET", "ARCADE", "BAKERY"
+    )[index % 4]
 
     for side in sides:
-        side.rect(0, 0, side.width, 7, DARK)
-        side.rect(0, 48, side.width, 3, FRAME)
+        side.rect(
+            0, 0,
+            side.width, 7,
+            DARK,
+        )
 
-        for u in range(16, int(side.width) - 24, 38):
+        side.rect(
+            0, 48,
+            side.width, 3,
+            FRAME,
+        )
+
+        for u in range(
+            16, int(side.width) - 24, 38
+        ):
             window(
-                side, u, wall_height - 24,
+                side, u,
+                wall_height - 24,
                 20, 14,
                 (index + u) % 3 != 0,
             )
@@ -366,8 +450,15 @@ def shop(builder, sides, x, y, width, length, height, index):
         centre = (width - 22) / 2
         display_width = centre - 16
 
-        window(front, 9, 10, display_width, 30)
-        window(front, centre + 29, 10, display_width, 30)
+        window(
+            front, 9, 10,
+            display_width, 30,
+        )
+
+        window(
+            front, centre + 29, 10,
+            display_width, 30,
+        )
 
         door(
             front, centre,
@@ -384,7 +475,9 @@ def shop(builder, sides, x, y, width, length, height, index):
         front.sign(label, 54, accent)
 
     for side in sides[2:]:
-        for u in range(14, int(side.width) - 24, 40):
+        for u in range(
+            14, int(side.width) - 24, 40
+        ):
             window(
                 side, u, 15,
                 24, 22,
@@ -392,7 +485,10 @@ def shop(builder, sides, x, y, width, length, height, index):
             )
 
 
-def house(builder, sides, x, y, width, length, height, index):
+def house(
+    builder, sides, x, y,
+    width, length, height, index,
+):
     walls = (
         (0.63, 0.57, 0.43, 1.0),
         (0.39, 0.54, 0.45, 1.0),
@@ -429,8 +525,17 @@ def house(builder, sides, x, y, width, length, height, index):
     )
 
     for side in sides:
-        side.rect(0, 0, side.width, 5, DARK)
-        side.rect(0, eave - 3, side.width, 3, CREAM)
+        side.rect(
+            0, 0,
+            side.width, 5,
+            DARK,
+        )
+
+        side.rect(
+            0, eave - 3,
+            side.width, 3,
+            CREAM,
+        )
 
     front_index = 0 if y == 1870 else 1
 
@@ -460,19 +565,27 @@ def house(builder, sides, x, y, width, length, height, index):
 
     for side in sides[:2]:
         side.rect(
-            width / 2 - 6, eave + 7,
+            width / 2 - 6,
+            eave + 7,
             12, 10,
-            DARK, offset=3.2,
+            DARK,
+            offset=3.2,
         )
 
         side.rect(
-            width / 2 - 4, eave + 9,
+            width / 2 - 4,
+            eave + 9,
             8, 6,
-            WARM, 0.4, 3.3,
+            WARM,
+            0.4,
+            3.3,
         )
 
 
-def warehouse(builder, sides, x, y, width, length, height, index):
+def warehouse(
+    builder, sides, x, y,
+    width, length, height, index,
+):
     wall_height = height - 10
 
     wall = (
@@ -494,9 +607,15 @@ def warehouse(builder, sides, x, y, width, length, height, index):
     )
 
     for side in sides:
-        side.rect(0, 0, side.width, 6, DARK)
+        side.rect(
+            0, 0,
+            side.width, 6,
+            DARK,
+        )
 
-        for u in range(6, int(side.width), 18):
+        for u in range(
+            6, int(side.width), 18
+        ):
             side.rect(
                 u, 6,
                 1.5, wall_height - 6,
@@ -531,17 +650,26 @@ def warehouse(builder, sides, x, y, width, length, height, index):
         )
 
     for side in sides[2:]:
-        for u in range(14, int(side.width) - 24, 36):
+        for u in range(
+            14, int(side.width) - 24, 36
+        ):
             window(
-                side, u, wall_height - 18,
+                side, u,
+                wall_height - 18,
                 22, 9,
             )
 
 
 def add_buildings(builder, world):
-    """All decorative structures use the existing collision footprints."""
+    """All structures use the existing collision footprints."""
 
     for index, building in enumerate(world.buildings):
+        if building == EDUVOS_BUILDING:
+            from campus3d import make_campus
+
+            make_campus(builder)
+            continue
+
         x, y, width, length = building
 
         _, depth, _ = world.building_style(
@@ -574,8 +702,12 @@ def add_buildings(builder, world):
         )
 
         arguments = (
-            builder, sides,
-            x, y, width, length,
+            builder,
+            sides,
+            x,
+            y,
+            width,
+            length,
             height,
         )
 

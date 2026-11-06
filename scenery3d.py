@@ -3,6 +3,7 @@
 import math
 
 from buildings3d import add_buildings, faces
+from campus3d import make_campus_ground
 from renderer3d import MeshBuilder
 from world import (
     BOLLARDS, CONTAINERS, HORIZONTAL_ROADS, HOUSES,
@@ -542,6 +543,8 @@ def make_town(world):
     make_containers(builder)
     make_trees(builder)
     make_lamps(builder)
+    make_lamps(builder)
+    make_campus_ground(builder)
 
     # Keep the depot bay aligned with the gameplay coordinates.
     x, y, width, length = 120, 206, 200, 60

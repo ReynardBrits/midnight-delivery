@@ -11,15 +11,15 @@ PARK_ZONE = (900, 232, 120, 56)
 MARKET_ZONE = (760, 1320, 120, 64)
 ARCADE_ZONE = (1540, 232, 120, 56)
 
-# Harbour. The container yard uses a narrow vertical bay.
+# Harbour.
 HARBOUR_ZONE = (2292, 768, 116, 64)
 CONTAINER_ZONE = (2268, 1840, 64, 112)
 DOCK_ZONE = (2980, 2216, 144, 64)
 
-# Gardens.
+# Gardens and Southbank.
 CEDAR_ZONE = (281, 1792, 128, 64)
-GARDEN_ZONE = (1116, 1792, 128, 64)
-COTTAGE_ZONE = (1916, 2216, 128, 64)
+GARDEN_ZONE = (1116, 2880, 128, 64)
+CAMPUS_ZONE = (1840, 2620, 120, 64)
 
 
 @dataclass(frozen=True)
@@ -32,51 +32,78 @@ class Contract:
 
 
 SHIFTS = (
-    # Shift 1: learn the central streets.
+    # Shift 1: town centre.
     (
         Contract(
-            "PARK ENTRANCE", PARK_ZONE,
-            100, 60.0,
+            "PARK ENTRANCE",
+            PARK_ZONE,
+            100,
+            60.0,
+            "STANDARD",
         ),
         Contract(
-            "NIGHT MARKET", MARKET_ZONE,
-            125, 80.0, "FRAGILE",
+            "NIGHT MARKET",
+            MARKET_ZONE,
+            125,
+            80.0,
+            "FRAGILE",
         ),
         Contract(
-            "NEON ARCADE", ARCADE_ZONE,
-            150, 40.0, "EXPRESS",
+            "NEON ARCADE",
+            ARCADE_ZONE,
+            150,
+            40.0,
+            "EXPRESS",
         ),
     ),
 
-    # Shift 2: longer trips and a tighter loading bay.
+    # Shift 2: harbour.
     (
         Contract(
-            "HARBOUR OFFICE", HARBOUR_ZONE,
-            125, 85.0,
+            "HARBOUR OFFICE",
+            HARBOUR_ZONE,
+            125,
+            85.0,
+            "STANDARD",
         ),
         Contract(
-            "CONTAINER YARD", CONTAINER_ZONE,
-            175, 65.0, "EXPRESS",
+            "CONTAINER YARD",
+            CONTAINER_ZONE,
+            175,
+            65.0,
+            "EXPRESS",
         ),
         Contract(
-            "DOCK STORE", DOCK_ZONE,
-            150, 110.0, "FRAGILE",
+            "DOCK STORE",
+            DOCK_ZONE,
+            150,
+            110.0,
+            "FRAGILE",
         ),
     ),
 
-    # Shift 3: residential trips through heavier central traffic.
+    # Shift 3: gardens and Southbank.
     (
         Contract(
-            "CEDAR HOUSE", CEDAR_ZONE,
-            175, 80.0, "FRAGILE",
+            "CEDAR HOUSE",
+            CEDAR_ZONE,
+            175,
+            80.0,
+            "FRAGILE",
         ),
         Contract(
-            "GARDEN HOUSE", GARDEN_ZONE,
-            200, 55.0, "EXPRESS",
+            "SOUTHBANK HOUSE",
+            GARDEN_ZONE,
+            200,
+            70.0,
+            "EXPRESS",
         ),
         Contract(
-            "SOUTH COTTAGE", COTTAGE_ZONE,
-            150, 90.0,
+            "EDUVOS EQUIPMENT",
+            CAMPUS_ZONE,
+            150,
+            110.0,
+            "FRAGILE",
         ),
     ),
 )
@@ -87,7 +114,8 @@ DESTINATIONS = tuple(
     for contract in shift
 )
 
-SHIFT_NAMES = ("CENTRE", "HARBOUR", "GARDENS")
+SHIFT_NAMES = ("CENTRE", "HARBOUR", "SOUTHBANK")
+
 
 TEAL = (0.227, 0.839, 0.784, 1.0)
 AMBER = (1.000, 0.745, 0.357, 1.0)

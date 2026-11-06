@@ -112,7 +112,7 @@ class Camera3D:
         self.x = float(x)
         self.y = float(y)
         self.yaw = 25.0
-        self.span = 880.0
+        self.span = 760.0
 
     def follow(self, x, y, dt):
         weight = 1.0 - math.exp(-8.0 * dt)
@@ -131,7 +131,7 @@ class Camera3D:
         eye = (
             self.x + math.sin(angle) * 1000.0,
             -self.y - math.cos(angle) * 1000.0,
-            1300.0,
+            950.0,
         )
 
         forward = normalise(

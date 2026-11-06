@@ -1,9 +1,9 @@
 WORLD_WIDTH = 3360
-WORLD_HEIGHT = 2560
+WORLD_HEIGHT = 3200
 ROAD_WIDTH = 160
 
 VERTICAL_ROADS = (500, 1300, 2100, 2780)
-HORIZONTAL_ROADS = (280, 840, 1400, 2040)
+HORIZONTAL_ROADS = (280, 840, 1400, 2040, 2700)
 WATER_X = 3160
 SPAWN = (540, 560)
 
@@ -72,7 +72,7 @@ SHOPS = (
 
 HOUSES = tuple(
     (x, y, 120, 128)
-    for y in (1650, 1870, 2290)
+    for y in (1650, 1870, 2290, 2960)
     for x in (
         80, 285,
         710, 915, 1120,
@@ -93,7 +93,14 @@ WAREHOUSES = (
     (3000, 2290, 112, 170),
 )
 
-BUILDINGS = SHOPS + HOUSES + WAREHOUSES
+EDUVOS_BUILDING = (1510, 2450, 460, 150)
+
+BUILDINGS = (
+    SHOPS
+    + HOUSES
+    + WAREHOUSES
+    + (EDUVOS_BUILDING,)
+)
 
 CONTAINERS = (
     (2490, 720, 190, 56),
@@ -140,7 +147,6 @@ BOLLARDS = tuple(
 )
 
 
-# Original pixel lettering for rooftop and district signs.
 LETTERS = {
     "A": (14, 17, 17, 31, 17, 17, 17),
     "B": (30, 17, 17, 30, 17, 17, 30),
@@ -161,6 +167,7 @@ LETTERS = {
     "S": (15, 16, 16, 14, 1, 1, 30),
     "T": (31, 4, 4, 4, 4, 4, 4),
     "U": (17, 17, 17, 17, 17, 17, 14),
+    "V": (17, 17, 17, 17, 17, 10, 4),
     "W": (17, 17, 17, 21, 21, 21, 10),
     "Y": (17, 17, 10, 4, 4, 4, 4),
 }
@@ -236,12 +243,22 @@ class World:
         )
 
         for x, y, _, _ in HOUSES:
-            r(x - 16, y - 16, 192, 200, PARK)
-            r(x + 42, y + 128, 36, 64, PARK_PATH)
+            r(
+                x - 16, y - 16,
+                192, 200,
+                PARK,
+            )
+
+            r(
+                x + 42, y + 128,
+                36, 64,
+                PARK_PATH,
+            )
 
             for offset in (0, 16, 32):
                 r(
-                    x + 8 + offset, y + 153,
+                    x + 8 + offset,
+                    y + 153,
                     9, 7,
                     colour("96637E"),
                 )
@@ -255,7 +272,8 @@ class World:
 
         r(
             WATER_X, 0,
-            WORLD_WIDTH - WATER_X, WORLD_HEIGHT,
+            WORLD_WIDTH - WATER_X,
+            WORLD_HEIGHT,
             WATER,
         )
 
@@ -272,9 +290,23 @@ class World:
         )
 
         for y in range(20, WORLD_HEIGHT, 80):
-            r(WATER_X - 38, y, 36, 2, ROOF_EDGE)
-            r(WATER_X + 18, y + 16, 46, 2, WAVE)
-            r(WATER_X + 86, y + 44, 72, 2, WAVE)
+            r(
+                WATER_X - 38, y,
+                36, 2,
+                ROOF_EDGE,
+            )
+
+            r(
+                WATER_X + 18, y + 16,
+                46, 2,
+                WAVE,
+            )
+
+            r(
+                WATER_X + 86, y + 44,
+                72, 2,
+                WAVE,
+            )
 
         for x, y in BOLLARDS:
             r(x - 5, y - 4, 18, 18, SHADOW)
@@ -287,22 +319,32 @@ class World:
         for x in VERTICAL_ROADS:
             r(
                 x - 12, 0,
-                ROAD_WIDTH + 24, WORLD_HEIGHT,
+                ROAD_WIDTH + 24,
+                WORLD_HEIGHT,
                 PAVEMENT,
             )
 
         for y in HORIZONTAL_ROADS:
             r(
                 0, y - 12,
-                WATER_X - 40, ROAD_WIDTH + 24,
+                WATER_X - 40,
+                ROAD_WIDTH + 24,
                 PAVEMENT,
             )
 
         for x in VERTICAL_ROADS:
-            r(x, 0, ROAD_WIDTH, WORLD_HEIGHT, ROAD)
+            r(
+                x, 0,
+                ROAD_WIDTH, WORLD_HEIGHT,
+                ROAD,
+            )
 
         for y in HORIZONTAL_ROADS:
-            r(0, y, WATER_X - 40, ROAD_WIDTH, ROAD)
+            r(
+                0, y,
+                WATER_X - 40, ROAD_WIDTH,
+                ROAD,
+            )
 
         for x in VERTICAL_ROADS:
             for y in range(0, WORLD_HEIGHT, 50):
@@ -331,26 +373,33 @@ class World:
                 for offset in range(12, 145, 20):
                     r(
                         x + offset, y - 32,
-                        12, 20, MARKING,
+                        12, 20,
+                        MARKING,
                     )
 
                     r(
                         x + offset, y + 172,
-                        12, 20, MARKING,
+                        12, 20,
+                        MARKING,
                     )
 
                     r(
                         x - 32, y + offset,
-                        20, 12, MARKING,
+                        20, 12,
+                        MARKING,
                     )
 
                     r(
                         x + 172, y + offset,
-                        20, 12, MARKING,
+                        20, 12,
+                        MARKING,
                     )
 
     def building_style(self, building, index):
         x, y, _, height = building
+
+        if building == EDUVOS_BUILDING:
+            return COMMERCIAL, 60, 24
 
         if index == 0:
             roof, depth = COMMERCIAL, 36
@@ -371,7 +420,7 @@ class World:
         return roof, depth, round(depth * 0.4)
 
     def draw_building_shadow(
-        self, renderer, building, index
+        self, renderer, building, index,
     ):
         x, y, width, height = building
 
@@ -389,22 +438,28 @@ class World:
             shade,
         )
 
-        renderer.draw_quad((
-            (x + width, y),
-            (x + width + sx, y + sy),
-            (x + width + sx, y + height + sy),
-            (x + width, y + height),
-        ), shade)
+        renderer.draw_quad(
+            (
+                (x + width, y),
+                (x + width + sx, y + sy),
+                (x + width + sx, y + height + sy),
+                (x + width, y + height),
+            ),
+            shade,
+        )
 
-        renderer.draw_quad((
-            (x, y + height),
-            (x + width, y + height),
-            (x + width + sx, y + height + sy),
-            (x + sx, y + height + sy),
-        ), shade)
+        renderer.draw_quad(
+            (
+                (x, y + height),
+                (x + width, y + height),
+                (x + width + sx, y + height + sy),
+                (x + sx, y + height + sy),
+            ),
+            shade,
+        )
 
     def draw_building(
-        self, renderer, building, index
+        self, renderer, building, index,
     ):
         r = renderer.draw_rect
         q = renderer.draw_quad
@@ -428,23 +483,29 @@ class World:
                 for c in value[:3]
             ) + (value[3],)
 
-        # Solid faces fit inside the collision rectangle.
-        q((
-            (x, y + rh),
-            (x + rw, y + rh),
-            (x + width, y + height),
-            (x + dx, y + height),
-        ), shade(roof, 0.78))
+        q(
+            (
+                (x, y + rh),
+                (x + rw, y + rh),
+                (x + width, y + height),
+                (x + dx, y + height),
+            ),
+            shade(roof, 0.78),
+        )
 
-        q((
-            (x + rw, y),
-            (x + width, y + depth),
-            (x + width, y + height),
-            (x + rw, y + rh),
-        ), shade(roof, 0.52))
+        q(
+            (
+                (x + rw, y),
+                (x + width, y + depth),
+                (x + width, y + height),
+                (x + rw, y + rh),
+            ),
+            shade(roof, 0.52),
+        )
 
         def facade(
-            left, top, face_width, face_height,
+            left, top,
+            face_width, face_height,
             face_colour,
         ):
             shift_top = dx * top / depth
@@ -453,30 +514,31 @@ class World:
                 dx * (top + face_height) / depth
             )
 
-            q((
+            q(
                 (
-                    x + left + shift_top,
-                    y + rh + top,
+                    (
+                        x + left + shift_top,
+                        y + rh + top,
+                    ),
+                    (
+                        x + left + face_width + shift_top,
+                        y + rh + top,
+                    ),
+                    (
+                        x + left + face_width + shift_bottom,
+                        y + rh + top + face_height,
+                    ),
+                    (
+                        x + left + shift_bottom,
+                        y + rh + top + face_height,
+                    ),
                 ),
-                (
-                    x + left + face_width + shift_top,
-                    y + rh + top,
-                ),
-                (
-                    x + left + face_width + shift_bottom,
-                    y + rh + top + face_height,
-                ),
-                (
-                    x + left + shift_bottom,
-                    y + rh + top + face_height,
-                ),
-            ), face_colour)
+                face_colour,
+            )
 
         facade(0, depth - 3, rw, 3, ROOF_EDGE)
 
-        rows = (
-            (8, 29) if depth >= 50 else (8,)
-        )
+        rows = (8, 29) if depth >= 50 else (8,)
 
         for row_index, row in enumerate(rows):
             for column, left in enumerate(
@@ -503,7 +565,6 @@ class World:
                     light,
                 )
 
-        # Roof plane, parapet and highlights.
         r(x, y, rw, rh, ROOF_EDGE)
 
         r(
@@ -546,13 +607,15 @@ class World:
             )
 
         r(
-            x + rw / 2 - 2, y + 8,
+            x + rw / 2 - 2,
+            y + 8,
             4, rh - 16,
             ROOF_EDGE,
         )
 
         r(
-            x + rw / 2 - 2, y + 8,
+            x + rw / 2 - 2,
+            y + 8,
             1, rh - 16,
             shade(roof, 1.35),
         )
@@ -562,25 +625,28 @@ class World:
         ):
             r(
                 light_x + 3, y + 20,
-                26, 17, SHADOW,
+                26, 17,
+                SHADOW,
             )
 
             r(
                 light_x, y + 17,
-                26, 17, ROOF_EDGE,
+                26, 17,
+                ROOF_EDGE,
             )
 
             r(
                 light_x + 3, y + 20,
-                20, 10, GLASS,
+                20, 10,
+                GLASS,
             )
 
             r(
                 light_x + 4, y + 20,
-                17, 2, METAL,
+                17, 2,
+                METAL,
             )
 
-        # Raised rooftop ventilation unit.
         vx = x + rw - 35
         vy = y + rh - 34
 
@@ -597,7 +663,8 @@ class World:
         for offset in (6, 9, 12):
             r(
                 vx + 4, vy + offset,
-                14, 1, ROOF_EDGE,
+                14, 1,
+                ROOF_EDGE,
             )
 
         if roof == COMMERCIAL:
@@ -617,12 +684,13 @@ class World:
                 )
 
         if index == 0:
-            # Loading door aligned with the depot bay.
             door_left = 116 - dx
 
             facade(
-                door_left, depth - 24,
-                68, 24, GLASS,
+                door_left,
+                depth - 24,
+                68, 24,
+                GLASS,
             )
 
             for offset in range(8, 64, 8):
@@ -634,18 +702,24 @@ class World:
                 )
 
             r(
-                x + rw / 2 - 43, y + 43,
-                86, 26, SHADOW,
+                x + rw / 2 - 43,
+                y + 43,
+                86, 26,
+                SHADOW,
             )
 
             r(
-                x + rw / 2 - 43, y + 38,
-                86, 26, ROOF_EDGE,
+                x + rw / 2 - 43,
+                y + 38,
+                86, 26,
+                ROOF_EDGE,
             )
 
             r(
-                x + rw / 2 - 37, y + 44,
-                74, 14, TEAL_DARK,
+                x + rw / 2 - 37,
+                y + 44,
+                74, 14,
+                TEAL_DARK,
             )
 
             lettering(
@@ -666,12 +740,14 @@ class World:
 
             r(
                 left + 3, y + 43,
-                sign_width, 26, SHADOW,
+                sign_width, 26,
+                SHADOW,
             )
 
             r(
                 left, y + 39,
-                sign_width, 26, ROOF_EDGE,
+                sign_width, 26,
+                ROOF_EDGE,
             )
 
             lettering(
@@ -683,7 +759,7 @@ class World:
             )
 
     def draw_house(
-        self, renderer, building, index
+        self, renderer, building, index,
     ):
         r = renderer.draw_rect
         q = renderer.draw_quad
@@ -703,73 +779,119 @@ class World:
             colour("476775"),
         )[index % 3]
 
-        q((
-            (x, y + rh),
-            (x + rw, y + rh),
-            (x + width, y + height),
-            (x + dx, y + height),
-        ), RESIDENTIAL)
+        q(
+            (
+                (x, y + rh),
+                (x + rw, y + rh),
+                (x + width, y + height),
+                (x + dx, y + height),
+            ),
+            RESIDENTIAL,
+        )
 
-        q((
-            (x + rw, y),
-            (x + width, y + depth),
-            (x + width, y + height),
-            (x + rw, y + rh),
-        ), ROOF_EDGE)
+        q(
+            (
+                (x + rw, y),
+                (x + width, y + depth),
+                (x + width, y + height),
+                (x + rw, y + rh),
+            ),
+            ROOF_EDGE,
+        )
 
         def front(left, top, w, h, tint):
             a = dx * top / depth
             b = dx * (top + h) / depth
 
-            q((
-                (x + left + a, y + rh + top),
-                (x + left + w + a, y + rh + top),
-                (x + left + w + b, y + rh + top + h),
-                (x + left + b, y + rh + top + h),
-            ), tint)
+            q(
+                (
+                    (x + left + a, y + rh + top),
+                    (x + left + w + a, y + rh + top),
+                    (x + left + w + b, y + rh + top + h),
+                    (x + left + b, y + rh + top + h),
+                ),
+                tint,
+            )
 
         for left in (12, 78):
-            front(left - 2, 5, 24, 14, ROOF_EDGE)
-            front(left, 7, 20, 10, WINDOW_LIGHT)
-            front(left + 9, 7, 2, 10, RESIDENTIAL)
+            front(
+                left - 2, 5,
+                24, 14,
+                ROOF_EDGE,
+            )
+
+            front(
+                left, 7,
+                20, 10,
+                WINDOW_LIGHT,
+            )
+
+            front(
+                left + 9, 7,
+                2, 10,
+                RESIDENTIAL,
+            )
 
         front(47, 5, 18, 21, GLASS)
         front(61, 16, 2, 2, WINDOW_LIGHT)
 
         r(x, y, rw, rh, ROOF_EDGE)
 
-        q((
-            (x + 3, y + 7),
-            (x + rw / 2, y + 2),
-            (x + rw / 2, y + rh - 7),
-            (x + 3, y + rh - 2),
-        ), roof)
+        q(
+            (
+                (x + 3, y + 7),
+                (x + rw / 2, y + 2),
+                (x + rw / 2, y + rh - 7),
+                (x + 3, y + rh - 2),
+            ),
+            roof,
+        )
 
         darker = tuple(
             c * 0.65 for c in roof[:3]
         ) + (1.0,)
 
-        q((
-            (x + rw / 2, y + 2),
-            (x + rw - 3, y + 7),
-            (x + rw - 3, y + rh - 2),
-            (x + rw / 2, y + rh - 7),
-        ), darker)
+        q(
+            (
+                (x + rw / 2, y + 2),
+                (x + rw - 3, y + 7),
+                (x + rw - 3, y + rh - 2),
+                (x + rw / 2, y + rh - 7),
+            ),
+            darker,
+        )
 
         for offset in range(20, rh - 10, 18):
             r(
                 x + 5, y + offset,
-                rw - 10, 2, ROOF_LINE,
+                rw - 10, 2,
+                ROOF_LINE,
             )
 
         r(
-            x + rw / 2 - 1, y + 4,
-            3, rh - 12, METAL,
+            x + rw / 2 - 1,
+            y + 4,
+            3, rh - 12,
+            METAL,
         )
 
-        r(x + rw - 30, y + 27, 18, 22, SHADOW)
-        r(x + rw - 33, y + 23, 16, 21, ROOF_EDGE)
-        r(x + rw - 34, y + 21, 18, 5, METAL)
+        r(
+            x + rw - 30, y + 27,
+            18, 22,
+            SHADOW,
+        )
+
+        r(
+            x + rw - 33, y + 23,
+            16, 21,
+            ROOF_EDGE,
+        )
+
+        r(
+            x + rw - 34, y + 21,
+            18, 5,
+            METAL,
+        )
 
     def draw_containers(self, renderer):
         r = renderer.draw_rect
@@ -790,32 +912,42 @@ class World:
 
             r(x + 8, y + 10, w, h, SHADOW)
 
-            q((
-                (x, y + h - 14),
-                (x + w - 6, y + h - 14),
-                (x + w, y + h),
-                (x + 6, y + h),
-            ), dark)
+            q(
+                (
+                    (x, y + h - 14),
+                    (x + w - 6, y + h - 14),
+                    (x + w, y + h),
+                    (x + 6, y + h),
+                ),
+                dark,
+            )
 
-            q((
-                (x + w - 6, y),
-                (x + w, y + 14),
-                (x + w, y + h),
-                (x + w - 6, y + h - 14),
-            ), ROOF_EDGE)
+            q(
+                (
+                    (x + w - 6, y),
+                    (x + w, y + 14),
+                    (x + w, y + h),
+                    (x + w - 6, y + h - 14),
+                ),
+                ROOF_EDGE,
+            )
 
             r(x, y, w - 6, h - 14, tint)
             r(x + 3, y + 3, w - 12, 2, METAL)
 
             for offset in range(12, w - 10, 14):
                 r(
-                    x + offset, y + 6,
-                    2, h - 24, dark,
+                    x + offset,
+                    y + 6,
+                    2, h - 24,
+                    dark,
                 )
 
             r(
-                x + w - 29, y + 12,
-                16, 10, MARKING,
+                x + w - 29,
+                y + 12,
+                16, 10,
+                MARKING,
             )
 
     def draw_trees(self, renderer):
@@ -864,9 +996,9 @@ class World:
         self.draw_containers(renderer)
         self.draw_trees(renderer)
 
-        # Depot loading bay.
         r = renderer.draw_rect
 
+        # Depot loading bay.
         r(120, 206, 200, 4, TEAL)
         r(120, 262, 200, 4, TEAL)
         r(120, 206, 4, 60, TEAL)
@@ -875,7 +1007,6 @@ class World:
         for x in range(140, 300, 40):
             r(x, 251, 20, 3, TEAL_DARK)
 
-        # Ground-painted names do not create obstacles.
         lettering(
             renderer,
             "TOWN CENTRE",
