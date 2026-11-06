@@ -1,4 +1,4 @@
-"""3D delivery campaign with district blackouts and delivery bonuses."""
+"""3D delivery campaign with blackouts and traffic signals."""
 
 from pathlib import Path
 
@@ -6,11 +6,7 @@ import pygame
 from OpenGL import GL
 
 from audio import Audio
-from blackouts3d import (
-    Blackouts,
-    BlackoutRenderer,
-    PowerBanner,
-)
+from blackouts3d import Blackouts, BlackoutRenderer
 from car import Car
 from controls3d import GameScreens, save_capture
 from delivery import Delivery
@@ -20,20 +16,20 @@ from hud import Hud
 from interface3d import DeliveryMarkers, Navigation
 from preferences3d import Preferences
 from preview_3d import (
-    WIDTH,
-    HEIGHT,
-    STEP,
-    DrivingCamera,
-    create_window,
-    make_lights,
-    make_blockers,
+    WIDTH, HEIGHT, STEP, DrivingCamera,
+    create_window, make_lights, make_blockers,
 )
 from records import Records
 from renderer import Renderer
 from renderer3d import Mesh3D
 from scenery3d import make_town
+from signals3d import (
+    TrafficSignals,
+    SignalTraffic,
+    SignalModels,
+    SignalBanner,
+)
 from vehicles3d import (
-    Traffic3D,
     VehicleModels,
     cargo_key,
     interpolated_pose,
@@ -52,9 +48,7 @@ def refuel(car, delivery, fuel, audio):
         )
 
     elif not delivery.at_depot(car):
-        delivery.feedback(
-            "Refuel at the depot."
-        )
+        delivery.feedback("Refuel at the depot.")
 
     elif abs(car.speed) > delivery.STOP_SPEED:
         delivery.feedback(
@@ -105,8 +99,12 @@ def main():
         car = Car(*world.spawn)
         delivery = Delivery()
         power = Blackouts()
+
+        signals = TrafficSignals(power)
+        world.obstacles += signals.obstacles
+
         fuel = Fuel()
-        traffic = Traffic3D()
+        traffic = SignalTraffic(signals)
         preferences = Preferences()
 
         records = Records(
@@ -123,8 +121,9 @@ def main():
             car.angle,
         )
 
-        static_blockers = tuple(
-            make_blockers(world)
+        static_blockers = (
+            tuple(make_blockers(world))
+            + signals.blockers
         )
 
         scene = keep(
@@ -142,19 +141,41 @@ def main():
         )
 
         models = keep(VehicleModels())
-        effects = keep(Effects(car, delivery))
-        visibility = keep(CarVisibility(stencil))
+
+        signal_models = keep(
+            SignalModels(signals)
+        )
+
+        effects = keep(
+            Effects(car, delivery)
+        )
+
+        visibility = keep(
+            CarVisibility(stencil)
+        )
+
         markers = keep(DeliveryMarkers())
         overlay = keep(Renderer(WIDTH, HEIGHT))
         hud = keep(Hud(WIDTH, HEIGHT))
-        screens = keep(GameScreens(WIDTH, HEIGHT))
+
+        screens = keep(
+            GameScreens(WIDTH, HEIGHT)
+        )
 
         banner = keep(
-            PowerBanner(WIDTH, HEIGHT, power)
+            SignalBanner(
+                WIDTH,
+                HEIGHT,
+                power,
+                signals,
+            )
         )
 
         audio = keep(Audio())
-        navigation = Navigation(WIDTH, HEIGHT)
+
+        navigation = Navigation(
+            WIDTH, HEIGHT
+        )
 
         mode = "title"
         help_open = False
@@ -186,6 +207,7 @@ def main():
             car.reset()
             delivery.reset()
             power.reset()
+            signals.reset()
             fuel.reset()
             traffic.reset()
 
@@ -412,6 +434,7 @@ def main():
                     if power.update(STEP):
                         audio.play_effect("warning")
 
+                    signals.update(STEP)
                     traffic.update(STEP, car)
 
                     car.update(
@@ -426,6 +449,12 @@ def main():
                     )
 
                     delivery.update(STEP, car)
+
+                    signals.check_player(
+                        car,
+                        delivery,
+                        audio,
+                    )
 
                     was_low = fuel.low
 
@@ -514,6 +543,7 @@ def main():
             )
 
             scene.draw_town(town)
+            signal_models.draw(scene)
 
             GL.glDepthMask(GL.GL_FALSE)
 
