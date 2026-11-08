@@ -4,7 +4,7 @@ A single-player courier game set in a fictional South African coastal town.
 Complete nine deliveries across three shifts while managing deadlines,
 traffic, vehicle condition, fragile parcels and fuel.
 
-Developed by Reynard Brits using Python, PyGame and PyOpenGL, with AI assistance.
+Developed by Reynard Brits using Python, PyGame and PyOpenGL.
 
 ## Requirements
 
@@ -104,8 +104,7 @@ Buildings, vehicles, signs, parcels, markers and particles are generated
 from code. Night ambience, engine loops and effects are procedurally
 synthesised. The interface uses PyGame's bundled default font. No external
 game asset packs are required. AI-assisted concept art guided the visual
-direction; the running game renders procedural geometry rather than that
-concept image. Development and documentation used AI assistance.
+direction.
 
 ## Quick checks
 
