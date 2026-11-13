@@ -170,8 +170,6 @@ Third-party libraries:
 - PyGame: window handling, input, timing and sound playback.
 - PyOpenGL: access to OpenGL rendering functions.
 
-ChatGPT assisted with planning, code generation and documentation.
-
 ## Troubleshooting
 
 ### Python 3.12 cannot be found
