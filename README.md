@@ -256,9 +256,6 @@ Both versions target 60 FPS, but performance depends on the computer and graphic
 
 The town layout, models, signs, vehicles, parcels and sounds were developed for this project using code. No external game asset packs are needed. The interface uses PyGame's bundled default font.
 
-AI assistance was used during development, debugging and documentation. PyGame and PyOpenGL are external libraries.
-
-Eduvos is used as a fictional campus landmark. No official endorsement is claimed.
 
 ## References
 
