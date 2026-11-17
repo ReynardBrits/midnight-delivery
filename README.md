@@ -221,8 +221,7 @@ are generated in `audio.py`. No downloaded image packs, music or sound
 recordings are required. Interface text uses PyGame's bundled default
 font; world signs use code-defined pixel lettering.
 
-Third-party libraries are PyGame and PyOpenGL. ChatGPT assisted with
-planning, code generation, troubleshooting and documentation.
+Third-party libraries are PyGame and PyOpenGL.
 
 ## Troubleshooting
 
